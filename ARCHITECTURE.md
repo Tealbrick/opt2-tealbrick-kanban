@@ -22,9 +22,9 @@ An issue is "ready" when it is `todo` and every `dependsOn` is done. Readiness i
 
 ## Operations (from `tealbrick.manifest.json`)
 
-34 operations.
-- Read (agent, per project): `projects_list`, `project_get`, `goals_list`, `issues_list` (filter `template`, a lowercase key for repeated work; Evolution's detector relies on it), `issue_get`, `activity_list`, `work_next`.
-- Write (agent): `project_update`, `goal_create`, `goal_update`, `issue_create`, `issue_update`, `issue_comment_add`, `issue_link`, `issue_unlink`, `issue_block`, `issue_complete`, `issue_document_link`, `issue_document_unlink`.
+38 operations.
+- Read (agent, per project): `projects_list`, `project_get`, `goals_list`, `issues_list` (filter `template`, a lowercase key for repeated work; Evolution's detector relies on it), `issue_get`, `activity_list`, `work_next`, `sync_pending`.
+- Write (agent): `issues_import`, `issue_sync_ack`, `usage_report`, `project_update`, `goal_create`, `goal_update`, `issue_create`, `issue_update`, `issue_comment_add`, `issue_link`, `issue_unlink`, `issue_block`, `issue_complete`, `issue_document_link`, `issue_document_unlink`.
 - Destructive, hold `destructive`: `project_delete`, `goal_delete`, `issue_delete`.
 - Person: `board_view`, `board_issue`, 8 writes, 2 destructive (held).
 
@@ -40,13 +40,13 @@ None. No keys and no app-specific environment variables.
 
 ## Data
 
-- **Stored:** Migrations 0001 to 0004: `agents`, `projects`, `goals`, `issues` (author kind, id, name; template; blocked reason; result), `issue_links`, `comments`, `issue_documents` (document id and title only), `activity`, `apps` (verified names of companion-app callers).
-- **Never stored:** Knowledge document bodies.
+- **Stored:** Migrations 0001 to 0005: `agents`, `projects` (`team` marks the Team board), `goals`, `issues` (author kind, id, name; template; blocked reason; result), `issue_links`, `comments`, `issue_documents` (document id and title only), `activity`, `apps` (verified names of companion-app callers), `issue_external` (source system, card id, https link, etag, last agreed status, last sync error), `usage_turns` + `usage_alloc` (token numbers per agent turn and the issues it is attributed to), `app_flags`.
+- **Never stored:** Knowledge document bodies; prompts, replies or tool text of agent turns (usage rows are numbers, model name and ids only).
 
 ## External calls and background work
 
-- **External:** None.
-- **Background:** None (no timers).
+- **External:** None. Outside trackers (Asana, Trello, ...) are read and changed by agents through Connect; Task Board only stores what they import (C88, C322(10)).
+- **Background:** None (no timers). On start, the Team board is made once when the workspace has no shared project (demo gap 7).
 
 ## Person UI
 
@@ -63,6 +63,12 @@ Port 8080. 0.25 cpu, 256 MB. Data 1 GB plus backup 2 GB (3 GB merged). Backup cr
 miniapp-sdk 0.1.25, manifest 0.1.18, conformance 0.1.18, ui 0.2.4 (no direct spec dependency).
 
 All `@opt2-tealbrick/*` pins use dist-host tarball URLs. Upgrade safety (SDK 0.1.25: pre-update snapshot, migration lock, failed mode) is in this app on `main` (0.1.13, dev channel; its qa1 soak is the gate for stable, C221). The stable release 0.1.12 pins SDK 0.1.22, so Core can roll back an update of that version only as an image (no data restore) until a stable version with SDK 0.1.25 ships (after the qa1 soak).
+
+## Outside trackers and token use (0.1.14)
+
+- **Import (C331(6))**: `issues_import` is the one sink for every path (agents now; Observer or an owner import over a Connect `tasks/1` dataset later). Key = (project, system, externalId). Same etag = unchanged; a changed etag updates title/summary; a changed source status applies only while the board still has the last agreed status, else `conflict` and the board keeps its status. `sync_pending` lists cards done here and not done in the source; the agent updates the source through Connect and calls `issue_sync_ack` (or sends `error`).
+- **Token use (C331(7), C327)**: the agent runtime (`tealbrick agent serve`) calls `usage_report` after each turn. Attribution: the issue named, else the issues the agent changed during the turn (split evenly), else its single in-progress issue, else unattributed per agent. Totals on `issue_get`, `board_issue`, `board_view`. Information only: no budget, warning or hold reads these numbers. Unattributed turns are pruned after 90 days; an issue's usage goes with the issue.
+- **Team board**: one shared project made once when the workspace has none, so every agent (and a read-only reader) sees shared work without per-project owner grants. `board_view {project: "all"}` shows every project.
 
 ## Known gaps
 

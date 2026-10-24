@@ -1,14 +1,29 @@
-// The owner board: one project at a time, six fixed columns, cards with the agent's name and status. Dragging a card
+// The owner board: one project at a time (or "All projects"), six fixed columns, cards with the agent's name and status. Dragging a card
 // to another column is `board_issue_update {status}` through the person session (keyboard: open the card, pick the
 // column). Goals and recent activity sit with the board. Dialogs live in ./dialogs.tsx.
 import { Button, Count, EmptyState, Field, Notice, Select, Tag } from "@opt2-tealbrick/ui";
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { type BoardData, COLUMNS, explain, type Issue, needsNote, PRIORITIES, type Priority, run, STATUS_LABEL, type Status } from "./api.ts";
+import {
+  addUsage,
+  type BoardData,
+  COLUMNS,
+  explain,
+  type Issue,
+  needsNote,
+  PRIORITIES,
+  type Priority,
+  run,
+  STATUS_LABEL,
+  type Status,
+  type UsageTotals,
+  usageLabel,
+} from "./api.ts";
 import { ActivityList, assigneeOptions } from "./common.tsx";
 import { EditProject, IssueDialog, MoveDialog, NewGoal, NewIssue, NewProject } from "./dialogs.tsx";
 
 const REFRESH_MS = 15_000;
 const DRAG_TYPE = "text/x-kanban-issue";
+const ALL = "all";
 
 export function useBoard(project: string | null) {
   const [data, setData] = useState<BoardData | null>(null);
@@ -31,32 +46,57 @@ export function useBoard(project: string | null) {
 
 const priorityLabel = (p: Priority) => PRIORITIES.find((x) => x.value === p)?.label ?? p;
 
-function Card({ issue, onOpen }: { issue: Issue; onOpen: () => void }) {
+function Card({ issue, usage, projectName, onOpen }: { issue: Issue; usage?: UsageTotals; projectName?: string; onOpen: () => void }) {
   const onDragStart = (e: DragEvent) => {
     e.dataTransfer.setData(DRAG_TYPE, issue.id);
     e.dataTransfer.effectAllowed = "move";
   };
   const docs = issue.documents.length;
+  const ext = issue.external;
+  const spent = usageLabel(usage);
   return (
     <li className="kb-card" draggable onDragStart={onDragStart}>
       <button type="button" className="kb-card-open" onClick={onOpen} aria-label={`${issue.title}, ${STATUS_LABEL[issue.status]}, open`}>
         <b>{issue.title}</b>
-        {issue.priority !== "medium" || issue.ready || (issue.status === "todo" && !issue.ready) || docs ? (
+        {issue.priority !== "medium" || issue.ready || (issue.status === "todo" && !issue.ready) || docs || ext ? (
           <span className="tb-row kb-tags">
             {issue.priority !== "medium" ? <Tag status={issue.priority === "high" ? "needs-you" : "default"}>{priorityLabel(issue.priority)}</Tag> : null}
             {issue.ready ? <Tag status="live">ready</Tag> : null}
             {issue.status === "todo" && !issue.ready ? <Tag status="idle">waiting</Tag> : null}
             {docs ? <Tag>{`${docs} ${docs === 1 ? "doc" : "docs"}`}</Tag> : null}
+            {ext ? <Tag>{ext.system}</Tag> : null}
+            {ext?.syncError ? <Tag status="needs-you">sync failed</Tag> : ext?.syncPending ? <Tag status="busy">to sync</Tag> : null}
           </span>
         ) : null}
         {issue.blockedReason ? <span className="kb-reason">{issue.blockedReason}</span> : null}
-        <span className="kb-who">{issue.assignee ? issue.assignee.name : "Unassigned"}</span>
+        <span className="kb-who">
+          {projectName ? `${projectName} · ` : ""}
+          {issue.assignee ? issue.assignee.name : "Unassigned"}
+        </span>
+        {spent ? <span className="kb-spent">{spent}</span> : null}
       </button>
     </li>
   );
 }
 
-function Column({ status, label, issues, onDrop, onOpen }: { status: Status; label: string; issues: Issue[]; onDrop: (id: string, status: Status) => void; onOpen: (id: string) => void }) {
+function Column({
+  status,
+  label,
+  issues,
+  data,
+  all,
+  onDrop,
+  onOpen,
+}: {
+  status: Status;
+  label: string;
+  issues: Issue[];
+  data: BoardData;
+  all: boolean;
+  onDrop: (id: string, status: Status) => void;
+  onOpen: (id: string) => void;
+}) {
+  const names = all ? new Map(data.projects.map((p) => [p.id, p.name])) : null;
   const [over, setOver] = useState(false);
   return (
     <section
@@ -80,7 +120,7 @@ function Column({ status, label, issues, onDrop, onOpen }: { status: Status; lab
       </h3>
       <ul className="kb-cards">
         {issues.map((i) => (
-          <Card key={i.id} issue={i} onOpen={() => onOpen(i.id)} />
+          <Card key={i.id} issue={i} usage={data.usage?.byIssue[i.id]} projectName={names?.get(i.project)} onOpen={() => onOpen(i.id)} />
         ))}
       </ul>
     </section>
@@ -120,6 +160,12 @@ export function Board({ project, setProject }: { project: string | null; setProj
     );
   }
   const current = data.project;
+  const all = current === ALL;
+  const one = current && !all ? current : null;
+  const ids = all ? data.projects.map((p) => p.id) : one ? [one] : [];
+  const spent = usageLabel(addUsage(ids.map((p) => data.usage?.byProject[p]).filter((u): u is UsageTotals => !!u)));
+  const loose = all ? usageLabel(addUsage(Object.values(data.usage?.unattributed ?? {}))) : null;
+  const toSync = ids.reduce((n, p) => n + (data.syncPending?.[p] ?? 0), 0);
   const onDrop = (id: string, status: Status) => {
     const issue = data.issues.find((i) => i.id === id);
     if (!issue || issue.status === status) return;
@@ -150,7 +196,10 @@ export function Board({ project, setProject }: { project: string | null; setProj
           <Field label="Project" className="kb-pick">
             <Select
               value={current ?? ""}
-              options={data.projects.map((p) => ({ value: p.id, label: p.name, meta: p.shared ? undefined : p.ownerAgent ? "own project" : "private" }))}
+              options={[
+                ...(data.projects.length > 1 ? [{ value: ALL, label: "All projects" }] : []),
+                ...data.projects.map((p) => ({ value: p.id, label: p.name, meta: p.team ? "team" : p.shared ? undefined : p.ownerAgent ? "own project" : "private" })),
+              ]}
               onValueChange={setProject}
             />
           </Field>
@@ -163,16 +212,16 @@ export function Board({ project, setProject }: { project: string | null; setProj
           />
         </Field>
         <span className="kb-grow" />
-        <Button variant={current ? "primary" : undefined} disabled={!current} onClick={() => setDialog("issue")}>
+        <Button variant={one ? "primary" : undefined} disabled={!one} onClick={() => setDialog("issue")}>
           New issue
         </Button>
-        <Button disabled={!current} onClick={() => setDialog("goal")}>
+        <Button disabled={!one} onClick={() => setDialog("goal")}>
           New goal
         </Button>
         <Button variant={current ? undefined : "primary"} onClick={() => setDialog("project")}>
           New project
         </Button>
-        <Button variant="quiet" disabled={!current} onClick={() => setDialog("settings")}>
+        <Button variant="quiet" disabled={!one} onClick={() => setDialog("settings")}>
           Project settings
         </Button>
         <Button variant="quiet" onClick={reload}>
@@ -193,12 +242,21 @@ export function Board({ project, setProject }: { project: string | null; setProj
               ))}
             </ul>
           ) : null}
+          {toSync ? <Notice>{`${toSync} imported ${toSync === 1 ? "card waits" : "cards wait"} to sync back to the source. Agents update the source through Connect.`}</Notice> : null}
+          {spent || loose ? (
+            <p className="tb-soft kb-spent">
+              {spent ? `Agents used ${spent} on ${all ? "these projects" : "this project"}.` : ""}
+              {loose ? ` Not linked to a card: ${loose}.` : ""} For information only; limits belong to each agent's harness.
+            </p>
+          ) : null}
           <div className="kb-board">
             {COLUMNS.map((c) => (
-              <Column key={c.status} status={c.status} label={c.label} issues={shown.filter((i) => i.status === c.status)} onDrop={onDrop} onOpen={setOpen} />
+              <Column key={c.status} status={c.status} label={c.label} issues={shown.filter((i) => i.status === c.status)} data={data} all={all} onDrop={onDrop} onOpen={setOpen} />
             ))}
           </div>
-          {data.issues.length >= 1000 ? <Notice>This project has more than 1000 issues. The board shows the first 1000 by priority. Agents can list all of them.</Notice> : null}
+          {data.issues.length >= 1000 ? (
+            <Notice>{`${all ? "These projects have" : "This project has"} more than 1000 issues. The board shows the first 1000 by priority. Agents can list all of them.`}</Notice>
+          ) : null}
           <section className="tb-stack kb-activity">
             <h2>Recent activity</h2>
             <ActivityList items={data.activity} />
@@ -214,10 +272,10 @@ export function Board({ project, setProject }: { project: string | null; setProj
           reload();
         }}
       />
-      {current ? <NewIssue key={current} open={dialog === "issue"} project={current} data={data} onClose={() => setDialog(null)} onDone={finish} /> : null}
-      {current ? <NewGoal open={dialog === "goal"} project={current} onClose={() => setDialog(null)} onDone={finish} /> : null}
+      {one ? <NewIssue key={one} open={dialog === "issue"} project={one} data={data} onClose={() => setDialog(null)} onDone={finish} /> : null}
+      {one ? <NewGoal open={dialog === "goal"} project={one} onClose={() => setDialog(null)} onDone={finish} /> : null}
       <EditProject
-        project={dialog === "settings" ? (data.projects.find((p) => p.id === current) ?? null) : null}
+        project={dialog === "settings" ? (data.projects.find((p) => p.id === one) ?? null) : null}
         agents={data.agents}
         onClose={() => setDialog(null)}
         onDone={(deleted, warning) => {

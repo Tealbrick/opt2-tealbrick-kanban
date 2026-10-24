@@ -60,7 +60,17 @@ const BOARD = {
   activity: [],
 };
 
-const stub = { calls: [] as { op: string; input: Record<string, unknown> }[], failUpdate: false };
+// 0.1.14: an imported card waiting to sync back, token use per card/project, a second project (the "All projects" choice)
+const usage = (i: number, cost: number | null) => ({ turns: 1, inputTokens: i, outputTokens: 500, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, costUsd: cost });
+const IMPORTED = { ...issue(2, "Fix the CSV export", "done"), external: { system: "trello", id: "trl_9", url: "https://trello.com/c/9", syncedStatus: "todo", syncPending: true, syncError: null } };
+const RICH = {
+  ...BOARD,
+  projects: [...BOARD.projects, { ...BOARD.projects[0], id: "prj_other", name: "Other", team: false }],
+  issues: [TODO, IMPORTED],
+  usage: { byIssue: { [IMPORTED.id]: usage(11_500, 0.06) }, byProject: { [PROJECT]: usage(11_500, 0.06) }, unattributed: {} },
+  syncPending: { [PROJECT]: 1 },
+};
+const stub = { calls: [] as { op: string; input: Record<string, unknown> }[], failUpdate: false, rich: false };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://localhost");
@@ -70,7 +80,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (!op) return json(404, { error: { code: "not_found", message: "not found" } });
   const body = JSON.parse(String(init?.body ?? "{}")) as { input?: Record<string, unknown> };
   stub.calls.push({ op, input: body.input ?? {} });
-  if (op === "board_view") return json(200, { status: "ok", output: BOARD });
+  if (op === "board_view") return json(200, { status: "ok", output: stub.rich ? RICH : BOARD });
   if (op === "board_issue_update") {
     if (stub.failUpdate) return json(500, { error: { code: "internal", message: "raw upstream text", requestId: "req_1" } });
     return json(200, { status: "ok", output: { issue: TODO } });
@@ -187,6 +197,24 @@ describe("Board drag and drop", () => {
     const alert = m.host.querySelector('[role="alert"]')?.textContent ?? "";
     assert.match(alert, /Something went wrong/);
     assert.doesNotMatch(alert, /raw upstream/);
+    await m.unmount();
+  });
+});
+
+describe("Board 0.1.14: source chip, sync count, token use (information only)", () => {
+  it("an imported card shows its source and 'to sync'; the board shows the sync count and token use", async () => {
+    stub.calls = [];
+    stub.rich = true;
+    const m = await mount(h(Board, { project: null, setProject: () => {} }));
+    const done = column(m.host, "Done").querySelector("li.kb-card")?.textContent ?? "";
+    assert.match(done, /trello/);
+    assert.match(done, /to sync/);
+    assert.match(done, /12\.0k tokens · \$0\.06 est\./);
+    const text = m.host.textContent ?? "";
+    assert.match(text, /1 imported card waits to sync back/);
+    assert.match(text, /Agents used 12\.0k tokens · \$0\.06 est\. on this project\. For information only/);
+    assert.doesNotMatch(text, /budget|limit reached|warning/i);
+    stub.rich = false;
     await m.unmount();
   });
 });

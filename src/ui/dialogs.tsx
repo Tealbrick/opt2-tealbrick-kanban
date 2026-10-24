@@ -3,7 +3,7 @@
 import { useScopes } from "@opt2-tealbrick/miniapp-sdk/client";
 import { Button, Dialog, Field, Notice, Select, Swatch, Switch, Textarea, TextInput } from "@opt2-tealbrick/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { type Agent, type BoardData, COLUMNS, dateOf, explain, type Issue, type IssueDetail, needsNote, PRIORITIES, type Priority, type Project, run, STATUS_LABEL, type Status, when } from "./api.ts";
+import { type Agent, type BoardData, COLUMNS, dateOf, explain, type Issue, type IssueDetail, needsNote, PRIORITIES, type Priority, type Project, run, STATUS_LABEL, type Status, usageLabel, when } from "./api.ts";
 import { ActivityList, assigneeOptions } from "./common.tsx";
 
 const COLUMN_OPTIONS = COLUMNS.map((c) => ({ value: c.status, label: c.label }));
@@ -254,6 +254,25 @@ export function IssueDialog({
       ) : (
         <>
           {issue.summary ? <p className="tb-soft kb-pre">{issue.summary}</p> : null}
+          {issue.external ? (
+            <p className="tb-soft">
+              {`From ${issue.external.system} (${issue.external.id})`}
+              {issue.external.url ? (
+                <>
+                  {" · "}
+                  <a href={issue.external.url} target="_blank" rel="noopener noreferrer">
+                    Open the source card
+                  </a>
+                </>
+              ) : null}
+              {issue.external.syncError
+                ? ` · Sync failed: ${issue.external.syncError}`
+                : issue.external.syncPending
+                  ? ` · Waits to sync back (the source says ${STATUS_LABEL[issue.external.syncedStatus]})`
+                  : " · In sync"}
+            </p>
+          ) : null}
+          {usageLabel(detail.usage) ? <p className="tb-soft kb-spent">{`Agents used ${usageLabel(detail.usage)} on this issue in ${detail.usage.turns} ${detail.usage.turns === 1 ? "turn" : "turns"}. For information only.`}</p> : null}
           <div className="kb-three">
             <Field label="Column">
               <Select

@@ -22,6 +22,17 @@ export interface Actor {
   id: string;
   name: string;
 }
+/** C331(6): the outside tracker card an issue came from (Task Board never calls the source). */
+export interface ExternalRef {
+  system: string;
+  id: string;
+  url: string | null;
+  /** the last status both sides agreed on */
+  syncedStatus: Status;
+  /** the status here differs from syncedStatus: an agent should update the source, then acknowledge */
+  syncPending: boolean;
+  syncError: string | null;
+}
 export interface DocRef {
   id: string;
   title: string;
@@ -42,6 +53,7 @@ export interface IssueView {
   blockedReason: string | null;
   result: string | null;
   documents: DocRef[];
+  external: ExternalRef | null;
   createdBy: Actor;
   createdAt: string;
   updatedAt: string;
@@ -52,6 +64,8 @@ export interface ProjectView {
   name: string;
   summary: string;
   shared: boolean;
+  /** the workspace Team board (demo gap 7) */
+  team: boolean;
   ownerAgent: string | null;
   counts: Record<Status, number>;
   createdAt: string;
@@ -223,6 +237,7 @@ function toProject(db: Db, r: Row): ProjectView {
     name: String(r.name),
     summary: String(r.summary),
     shared: Number(r.shared) === 1,
+    team: Number(r.team) === 1,
     ownerAgent: strOrNull(r.owner_agent),
     counts: counts(db, String(r.id)),
     createdAt: iso(r.created_at),
@@ -236,7 +251,7 @@ export function getProject(db: Db, id: string): ProjectView | null {
   const r = projectRow(db, id);
   return r ? toProject(db, r) : null;
 }
-/** The given ids that exist, as views: own project of the caller first, then shared, then by name. */
+/** The given ids that exist, as views: own project of the caller first, then the Team board, then shared, then by name. */
 export function listProjects(db: Db, ids: readonly string[] | null, firstOwner?: string): ProjectView[] {
   const rows =
     ids === null
@@ -244,12 +259,17 @@ export function listProjects(db: Db, ids: readonly string[] | null, firstOwner?:
       : ids.length === 0
         ? []
         : db.prepare(`SELECT * FROM projects WHERE id IN (${marks(ids.length)})`).all(...ids);
-  const rank = (r: Row) => (firstOwner && r.owner_agent === firstOwner ? 0 : Number(r.shared) === 1 ? 1 : 2);
+  const rank = (r: Row) => (firstOwner && r.owner_agent === firstOwner ? 0 : Number(r.team) === 1 ? 1 : Number(r.shared) === 1 ? 2 : 3);
   return rows.sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)) || String(a.id).localeCompare(String(b.id))).map((r) => toProject(db, r));
 }
 
-export function insertProject(db: Db, p: { id: string; name: string; summary?: string; shared: boolean; ownerAgent: string | null }, actor: Actor, now = Date.now()): ProjectView {
-  db.prepare("INSERT INTO projects (id, name, summary, shared, owner_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+export function insertProject(
+  db: Db,
+  p: { id: string; name: string; summary?: string; shared: boolean; ownerAgent: string | null; team?: boolean },
+  actor: Actor,
+  now = Date.now(),
+): ProjectView {
+  db.prepare("INSERT INTO projects (id, name, summary, shared, owner_agent, created_at, updated_at, team) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
     p.id,
     p.name,
     p.summary ?? "",
@@ -257,6 +277,7 @@ export function insertProject(db: Db, p: { id: string; name: string; summary?: s
     p.ownerAgent,
     now,
     now,
+    p.team ? 1 : 0,
   );
   logActivity(db, { project: p.id, issue: null, actor, kind: "project_created", summary: `Project "${p.name}" created` }, now);
   return getProject(db, p.id) as ProjectView;
@@ -436,10 +457,23 @@ export function toIssue(db: Db, r: Row): IssueView {
       .prepare("SELECT document, title FROM issue_documents WHERE issue = ? ORDER BY linked_at, document")
       .all(id)
       .map((d) => ({ id: String(d.document), title: String(d.title) })),
+    external: externalOf(db, id, String(r.status)),
     createdBy: actorOf(db, r.created_by_kind, r.created_by_id, r.created_by_name),
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
     completedAt: isoOrNull(r.completed_at),
+  };
+}
+function externalOf(db: Db, id: string, status: string): ExternalRef | null {
+  const e = db.prepare("SELECT system, external_id, url, synced_status, sync_error FROM issue_external WHERE issue = ?").get(id);
+  if (!e) return null;
+  return {
+    system: String(e.system),
+    id: String(e.external_id),
+    url: strOrNull(e.url),
+    syncedStatus: String(e.synced_status) as Status,
+    syncPending: String(e.synced_status) !== status,
+    syncError: strOrNull(e.sync_error),
   };
 }
 export function getIssue(db: Db, id: string): IssueView | null {
@@ -716,6 +750,11 @@ export function unlinkDocument(db: Db, id: string, document: string, actor: Acto
 
 function purgeIssue(db: Db, id: string): void {
   db.prepare("DELETE FROM issue_links WHERE issue = ? OR depends_on = ?").run(id, id);
+  db.prepare("DELETE FROM issue_external WHERE issue = ?").run(id);
+  // usage of the issue goes with it (KU-6): a turn counted only for deleted issues is removed, not shown as unattributed
+  const turns = db.prepare("SELECT turn_id FROM usage_alloc WHERE issue = ?").all(id).map((r) => String(r.turn_id));
+  db.prepare("DELETE FROM usage_alloc WHERE issue = ?").run(id);
+  for (const t of turns) db.prepare("DELETE FROM usage_turns WHERE id = ? AND NOT EXISTS (SELECT 1 FROM usage_alloc WHERE turn_id = ?)").run(t, t);
   db.prepare("DELETE FROM comments WHERE issue = ?").run(id);
   db.prepare("DELETE FROM issue_documents WHERE issue = ?").run(id);
   db.prepare("DELETE FROM activity WHERE issue = ?").run(id);
