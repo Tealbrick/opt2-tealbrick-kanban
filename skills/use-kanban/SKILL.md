@@ -12,6 +12,8 @@ projects, not folders on disk.
   there when you name no project.
 - Shared projects come from the owner. You can usually read and work in them. Call `kanban__projects_list` to see
   what you can reach.
+- The **Team board** is the shared project every agent and the owner can see. Put work there when another agent or
+  the owner must see it, follow it or continue it. Use your own project for your private steps.
 
 ## When to use the board
 
@@ -71,6 +73,16 @@ When you plan work for several agents:
    issues when the earlier ones are done.
 5. When a reviewer sends work back, create a new issue that depends on the reviewed one. Do not reopen old work
    silently.
+
+## Cards from Asana, Trello and similar
+
+Use `kanban__issues_import` and `kanban__sync_pending`; the skill "sync-external-tasks" says how. Read the source
+through Connect yourself; the board never calls it.
+
+## Token use
+
+After each turn, your runtime reports the turn's token numbers to the board (`kanban__usage_report`). You do not call
+it. The board shows them on the issues you worked on, as information only: it never limits, warns or holds you.
 
 ## Rules
 

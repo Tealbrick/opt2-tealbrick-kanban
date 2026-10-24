@@ -37,6 +37,8 @@ import {
   type IssueDocumentUnlinkInput,
   type IssueGetInput,
   type IssueLinkInput,
+  type IssueSyncAckInput,
+  type IssuesImportInput,
   type IssuesListInput,
   type IssueUnlinkInput,
   type IssueUpdateInput,
@@ -45,6 +47,8 @@ import {
   type ProjectDeleteInput,
   type ProjectGetInput,
   type ProjectUpdateInput,
+  type SyncPendingInput,
+  type UsageReportInput,
   type WorkNextInput,
 } from "#kit";
 import {
@@ -85,6 +89,8 @@ import {
   upsertAgent,
   upsertApp,
 } from "./board.ts";
+import { ackSync, importIssues, pendingByProject, syncPending, systemKey } from "./sync.ts";
+import { boardUsage, issueUsage, recordUsage } from "./usage.ts";
 
 export const manifest = JSON.parse(readFileSync(new URL("../tealbrick.manifest.json", import.meta.url), "utf8")) as AppDefinition["manifest"];
 export const migrationsDir = fileURLToPath(new URL("../migrations", import.meta.url));
@@ -274,7 +280,7 @@ export const handlers = {
     async run(i, ctx) {
       await prepare(ctx);
       const r = await needIssue(ctx, i.issue, "read");
-      return { issue: toIssue(ctx.db, r), dependents: dependents(ctx.db, i.issue), comments: listComments(ctx.db, i.issue) };
+      return { issue: toIssue(ctx.db, r), dependents: dependents(ctx.db, i.issue), comments: listComments(ctx.db, i.issue), usage: issueUsage(ctx.db, i.issue) };
     },
   }),
   [OP.issueCreate]: op<IssueCreateInput, unknown>({
@@ -400,18 +406,69 @@ export const handlers = {
     },
   }),
 
+  // ------------------------------------------------------------ outside trackers (C331(6)); Task Board never calls the source
+  [OP.issuesImport]: op<IssuesImportInput, unknown>({
+    scope: (i, c) => ownOr(i.project, c),
+    redact: (i) => `import ${i.items.length} ${i.system} card(s)`,
+    async run(i, ctx) {
+      const a = await prepare(ctx);
+      const project = ownOr(i.project, ctx.caller);
+      await needProject(ctx, project, "create");
+      await needProject(ctx, project, "update");
+      const system = systemKey(i.system);
+      return { project, system, results: tx(ctx, () => importIssues(ctx.db, project, system, i.items, a)) };
+    },
+  }),
+  [OP.syncPending]: op<SyncPendingInput, unknown>({
+    scope: (i) => i.project ?? null,
+    async run(i, ctx) {
+      await prepare(ctx);
+      const system = i.system === undefined ? undefined : systemKey(i.system);
+      return { issues: syncPending(ctx.db, { projects: await readable(ctx, i.project), system, all: i.all, limit: i.limit ?? 50 }) };
+    },
+  }),
+  [OP.issueSyncAck]: op<IssueSyncAckInput, unknown>({
+    scope: (i) => ownerProject("issue", i.issue),
+    redact: sayIssue,
+    async run(i, ctx) {
+      const a = await prepare(ctx);
+      await needIssue(ctx, i.issue, "update");
+      return { issue: tx(ctx, () => ackSync(ctx.db, i.issue, i, a)) };
+    },
+  }),
+
+  // ------------------------------------------------------------ token usage (C331(7)): information only (C327)
+  [OP.usageReport]: op<UsageReportInput, unknown>({
+    scope: () => null,
+    redact: (i) => `usage of turn ${i.turn.slice(0, 40)}`,
+    async run(i, ctx) {
+      const a = await prepare(ctx);
+      // numbers of an agent's own turns only; an app caller has no turns of its own here
+      if (a.kind !== "agent") throw new TbError("agents_only", "usage is reported for agent turns only", 403);
+      // C335 (2): a named issue outside the caller's grant is refused, the same not_found as a missing one (nothing leaks)
+      const explicit = i.issue ? String((await needIssue(ctx, i.issue, "read")).id) : undefined;
+      const projects = await ctx.scope.readable(PROJECT_SCOPE);
+      const { issue: _issue, ...report } = i;
+      return tx(ctx, () => recordUsage(ctx.db, a.id, report, { explicit, projects }));
+    },
+  }),
+
   // ------------------------------------------------------------ owner board (person ops)
   [OP.boardView]: op<BoardViewInput, unknown>({
     async run(i, ctx) {
       const projects = listProjects(ctx.db, null);
-      const project = i.project && projectRow(ctx.db, i.project) ? i.project : (projects[0]?.id ?? null);
+      // KT-3: "all" = the issues of every project on one board
+      const project = i.project === ALL ? ALL : i.project && projectRow(ctx.db, i.project) ? i.project : (projects[0]?.id ?? null);
+      const ids = project === ALL ? projects.map((p) => p.id) : project ? [project] : [];
       return {
         projects,
         agents: listAgents(ctx.db),
         project,
-        issues: project ? listIssues(ctx.db, { projects: [project], limit: 1000 }).issues : [],
-        goals: project ? listGoals(ctx.db, [project]) : [],
-        activity: project ? listActivity(ctx.db, { projects: [project], limit: 50 }).activity : [],
+        issues: listIssues(ctx.db, { projects: ids, limit: 1000 }).issues,
+        goals: listGoals(ctx.db, ids),
+        activity: listActivity(ctx.db, { projects: ids, limit: 50 }).activity,
+        usage: boardUsage(ctx.db, ids),
+        syncPending: pendingByProject(ctx.db),
       };
     },
   }),
@@ -424,12 +481,14 @@ export const handlers = {
         dependents: dependents(ctx.db, i.issue),
         comments: listComments(ctx.db, i.issue),
         activity: listActivity(ctx.db, { projects: [String(r.project)], issue: i.issue, limit: 100 }).activity,
+        usage: issueUsage(ctx.db, i.issue),
       };
     },
   }),
   [OP.boardProjectCreate]: op<BoardProjectCreateInput, unknown>({
     async run(i, ctx) {
-      const shared = i.shared ?? true;
+      // C335 (1): only the auto-made Team board is shared by default; every other project keeps per-grant visibility
+      const shared = i.shared ?? false;
       const p = tx(ctx, () => insertProject(ctx.db, { id: newProjectId(), name: i.name, summary: i.summary, shared, ownerAgent: null }, actorOf(ctx)));
       await ctx.scopes.instances.create(PROJECT_SCOPE, p.id, p.name, { shared });
       return { project: p };
@@ -495,6 +554,29 @@ export const handlers = {
 } satisfies Record<OpId, HandlerSpec>;
 
 const newProjectId = () => `prj_${ulid()}`;
+const ALL = "all";
+
+/** KT-1 (demo gap 7): one shared Team board, made once when the workspace has no shared project. The SDK's `shared`
+ *  default gives every current and later agent "Read and work" (the Core grant still bounds it), so a reader agent sees
+ *  its cards with no per-project grant. An owner who deletes it does not get it back (flag). */
+export async function ensureTeamBoard(db: Db, scopes: Pick<OpContext["scopes"], "instances">, now = Date.now()): Promise<void> {
+  const team = db.transaction(() => {
+    const made = db.prepare("SELECT 1 FROM app_flags WHERE key = 'team_board_made'").get();
+    const existing = db.prepare("SELECT * FROM projects WHERE team = 1").get();
+    if (existing || made) return existing ?? null;
+    db.prepare("INSERT INTO app_flags (key, value, set_at) VALUES ('team_board_made', '1', ?)").run(now);
+    if (db.prepare("SELECT 1 FROM projects WHERE shared = 1").get()) return null;
+    const p = insertProject(
+      db,
+      { id: newProjectId(), name: "Team board", summary: "Work every agent and the owner can see.", shared: true, ownerAgent: null, team: true },
+      { kind: "app", id: "kanban", name: "Task Board" },
+      now,
+    );
+    return projectRow(db, p.id) ?? null;
+  });
+  // (re)declared on every start: a crash between the row and the scope instance heals on the next boot
+  if (team) await scopes.instances.create(PROJECT_SCOPE, String(team.id), String(team.name), { shared: Number(team.shared) === 1 });
+}
 
 export const definition: SdkAppDefinition = {
   manifest,
@@ -502,6 +584,7 @@ export const definition: SdkAppDefinition = {
   migrations: migrationsDir,
   async onStart(ctx) {
     bindScopeDb(ctx.db);
+    await ensureTeamBoard(ctx.db, ctx.scopes);
   },
   events: {
     // needsAgentDirectory: every workspace agent appears here once (first sight). Keep the assignee directory and
