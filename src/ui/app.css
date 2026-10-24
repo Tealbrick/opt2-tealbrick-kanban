@@ -43,3 +43,5 @@
 @media (max-width: 720px) {
   .kb-three, .kb-pair { grid-template-columns: 1fr; }
 }
+/* 0.1.14: token use per card and per project (information only, C327) */
+.kb-spent { font-size: var(--tb-text-hint); color: var(--tb-muted); line-height: 16px; }

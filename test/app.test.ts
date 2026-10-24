@@ -189,9 +189,12 @@ test("access: unreadable project = not found; read-only = scope_denied; delete n
 test("owner projects: shared flag goes to the scope instance; deleting keeps no data", async () => {
   const db = workspace();
   const owner = ctxFor(db, OWNER);
-  const p = (await call("board_project_create", { name: "Website", summary: "public site" }, owner)) as any;
+  const priv = (await call("board_project_create", { name: "Payroll" }, owner)) as any;
+  assert.equal(priv.project.shared, false, "C335 (1): owner projects are private by default; only the Team board is shared by default");
+  assert.deepEqual(owner.instances.at(-1), { type: "project", id: priv.project.id, label: "Payroll", shared: false });
+  const p = (await call("board_project_create", { name: "Website", summary: "public site", shared: true }, owner)) as any;
   assert.match(p.project.id, /^prj_/);
-  assert.equal(p.project.shared, true, "owner projects are shared by default");
+  assert.equal(p.project.shared, true);
   assert.deepEqual(owner.instances.at(-1), { type: "project", id: p.project.id, label: "Website", shared: true });
   await call("board_project_update", { project: p.project.id, shared: false }, owner);
   assert.equal(owner.instances.at(-1)?.shared, false);
@@ -293,7 +296,7 @@ test("QA S3: write ops on a missing issue/goal answer not_found in scope() (befo
 test("QA S2 (SDK 0.1.13): owner projects are created and re-shared as shared scope instances; no app-side share record", async () => {
   const db = workspace();
   const owner = ctxFor(db, OWNER);
-  const p = (await call("board_project_create", { name: "Launch" }, owner)) as any;
+  const p = (await call("board_project_create", { name: "Launch", shared: true }, owner)) as any;
   assert.deepEqual(owner.instances.at(-1), { type: "project", id: p.project.id, label: "Launch", shared: true });
   await call("board_project_update", { project: p.project.id, shared: false }, owner);
   await call("board_project_update", { project: p.project.id, shared: true }, owner);

@@ -29,6 +29,9 @@ This repository is public. It must never contain secrets or personal data, and n
 - **Names on everything.** The author of every issue, comment and activity entry is the verified caller (agent, companion app or the owner), never a free-text label. Assignee = an agent id from the workspace directory, or the owner.
 - **`template`** (optional, on `issue_create`, filter on `issues_list`): a stable lowercase key for repeated work (uppercase is refused with `template_invalid`, never changed), so Evolution can group done issues (contract: `issues_list {status: "done", limit: 200}` returns `id, title, status, assignee, template`).
 - **`work_next`:** an agent's ready issues and its issues in progress. Agents are told to call `kanban__work_next` first (manifest `harnessHints`).
+- **Outside trackers:** agents read Asana, Trello, Linear or Jira cards through Connect and put them on the board with `issues_import` (idempotent per source card); `sync_pending` and `issue_sync_ack` sync the status back when the work is done. Task Board never calls the source.
+- **Token use:** the agent runtime reports each turn's token numbers (`usage_report`); the board shows them per card, project and agent. Information only: nothing limits, warns or holds on cost.
+- **Team board:** a shared project every agent can read and work in, made once when the workspace has none.
 - **Shared projects reach every agent.** A project created or switched to shared gets the `shared` default grant ("Read and work") for every agent already seen and for later agents on first sight. Unsharing or deleting removes existing access from the owner board.
 - **Deletes are destructive** (`issue_delete`, `goal_delete`, `project_delete`): held for the owner by default.
 - **Knowledge documents** are referenced by id and title that the agent supplies after reading the document with its own Knowledge access. Kanban never reads Knowledge on an agent's behalf and has no companion grant to it. No document bodies are stored.
@@ -46,7 +49,7 @@ New code is TypeScript (Node 24+). Swift only where the macOS app requires it.
 | `src/board.ts` | the board store: projects, goals, issues, dependencies (computed `ready`, promotion), comments, document references, activity |
 | `src/main.ts` | `startApp(app, process.env)` |
 | `src/ui/` | owner board (six columns, drag = `board_issue_update`), holds, receipts, agents and scopes, backups and export, inside `<AppShell>` from `@opt2-tealbrick/ui` (`standard.tsx` and `pages.css` are the template's shared copies, unchanged; `app.css` is the board layout only); built to `dist/ui` |
-| `migrations/` | 4 forward-only migrations (`0001_init.sql` baseline, `0002_share_grants.sql`, `0003_drop_share_grants.sql`, `0004_apps.sql`). Never edit a released file. |
+| `migrations/` | 5 forward-only migrations (`0001_init.sql` baseline, `0002_share_grants.sql`, `0003_drop_share_grants.sql`, `0004_apps.sql`, `0005_sync_usage.sql`). Never edit a released file. |
 | `skills/use-kanban/SKILL.md` | the agent skill: when to use the board, how to log, block, complete and split work |
 | `scripts/build-ui.ts` | UI build without a bundler (tsc output + vendored modules + import map) |
 | `gen/` (not committed) | `tb-gen` output; `node --run kit` generates the kit and compiles it to `dist/kit` (`#kit` import) |

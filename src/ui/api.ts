@@ -12,6 +12,7 @@ export type Agent = BoardData["agents"][number];
 export type Goal = BoardData["goals"][number];
 export type Activity = BoardData["activity"][number];
 export type IssueDetail = Out<"board_issue">;
+export type UsageTotals = IssueDetail["usage"];
 export type Status = Issue["status"];
 export type Priority = Issue["priority"];
 
@@ -67,6 +68,28 @@ export function when(isoTime: string, now: Date = new Date()): string {
 /** The date only, "9 Oct 2026" (en-GB). */
 export function dateOf(isoTime: string): string {
   return new Date(isoTime).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** "12.3k tokens · $0.06 est." — tokens = every input, cache and output token of the counted turns (C331(7), info only). */
+export function usageLabel(u: UsageTotals | undefined): string | null {
+  if (!u || u.turns === 0) return null;
+  const total = u.inputTokens + u.cacheCreationInputTokens + u.cacheReadInputTokens + u.outputTokens;
+  const n = total >= 1e6 ? `${(total / 1e6).toFixed(1)}M` : total >= 1e3 ? `${(total / 1e3).toFixed(1)}k` : String(total);
+  const cost = u.costUsd === null ? "" : ` · $${u.costUsd < 0.01 && u.costUsd > 0 ? "<0.01" : u.costUsd.toFixed(2)} est.`;
+  return `${n} tokens${cost}`;
+}
+/** Sum of several totals (the "All projects" view). */
+export function addUsage(list: UsageTotals[]): UsageTotals {
+  const out: UsageTotals = { turns: 0, inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, costUsd: null };
+  for (const u of list) {
+    out.turns += u.turns;
+    out.inputTokens += u.inputTokens;
+    out.outputTokens += u.outputTokens;
+    out.cacheCreationInputTokens += u.cacheCreationInputTokens;
+    out.cacheReadInputTokens += u.cacheReadInputTokens;
+    if (u.costUsd !== null) out.costUsd = (out.costUsd ?? 0) + u.costUsd;
+  }
+  return out;
 }
 
 /** Moving to blocked or done asks for the reason / result (optional), as the agent ops do. Every move path (drag,
