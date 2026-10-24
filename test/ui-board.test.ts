@@ -65,7 +65,7 @@ const usage = (i: number, cost: number | null) => ({ turns: 1, inputTokens: i, o
 const IMPORTED = { ...issue(2, "Fix the CSV export", "done"), external: { system: "trello", id: "trl_9", url: "https://trello.com/c/9", syncedStatus: "todo", syncPending: true, syncError: null } };
 const RICH = {
   ...BOARD,
-  projects: [...BOARD.projects, { ...BOARD.projects[0], id: "prj_other", name: "Other", team: false }],
+  projects: [{ ...BOARD.projects[0], team: false }, { ...BOARD.projects[0], id: "prj_team", name: "Team board", team: true }],
   issues: [TODO, IMPORTED],
   usage: { byIssue: { [IMPORTED.id]: usage(11_500, 0.06) }, byProject: { [PROJECT]: usage(11_500, 0.06) }, unattributed: {} },
   syncPending: { [PROJECT]: 1 },
@@ -80,7 +80,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (!op) return json(404, { error: { code: "not_found", message: "not found" } });
   const body = JSON.parse(String(init?.body ?? "{}")) as { input?: Record<string, unknown> };
   stub.calls.push({ op, input: body.input ?? {} });
-  if (op === "board_view") return json(200, { status: "ok", output: stub.rich ? RICH : BOARD });
+  if (op === "board_view") return json(200, { status: "ok", output: stub.rich ? { ...RICH, project: body.input?.project ?? PROJECT } : BOARD });
   if (op === "board_issue_update") {
     if (stub.failUpdate) return json(500, { error: { code: "internal", message: "raw upstream text", requestId: "req_1" } });
     return json(200, { status: "ok", output: { issue: TODO } });
@@ -214,6 +214,17 @@ describe("Board 0.1.14: source chip, sync count, token use (information only)", 
     assert.match(text, /1 imported card waits to sync back/);
     assert.match(text, /Agents used 12\.0k tokens · \$0\.06 est\. on this project\. For information only/);
     assert.doesNotMatch(text, /budget|limit reached|warning/i);
+    assert.doesNotMatch(text, /Team board is visible/, "the notice is for the Team board only");
+    stub.rich = false;
+    await m.unmount();
+  });
+});
+
+describe("Board 0.1.14: Team board notice (C335 (1))", () => {
+  it("the Team board says it is visible to all agents", async () => {
+    stub.rich = true;
+    const m = await mount(h(Board, { project: "prj_team", setProject: () => {} }));
+    assert.match(m.host.textContent ?? "", /Team board is visible to all your agents\./);
     stub.rich = false;
     await m.unmount();
   });

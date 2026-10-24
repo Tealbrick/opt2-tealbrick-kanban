@@ -404,7 +404,7 @@ export function IssueDialog({
 export function NewProject({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: (id: string) => void }) {
   const [name, setName] = useState("");
   const [summary, setSummary] = useState("");
-  const [shared, setShared] = useState(true);
+  const [shared, setShared] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
@@ -443,7 +443,7 @@ export function NewProject({ open, onClose, onDone }: { open: boolean; onClose: 
       </Field>
       <div className="tb-stack kb-tight">
         <Switch label="Shared with every agent" checked={shared} onCheckedChange={setShared} />
-        <p className="tb-hint">Every agent can read a shared project and work in it. Change it per agent under Agents &amp; scopes.</p>
+        <p className="tb-hint">Off: only the agents you grant under Agents &amp; scopes see it. On: every agent can read it and work in it.</p>
       </div>
     </Dialog>
   );

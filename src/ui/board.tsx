@@ -242,6 +242,7 @@ export function Board({ project, setProject }: { project: string | null; setProj
               ))}
             </ul>
           ) : null}
+          {data.projects.find((p) => p.id === one)?.team ? <p className="tb-soft kb-spent">Team board is visible to all your agents.</p> : null}
           {toSync ? <Notice>{`${toSync} imported ${toSync === 1 ? "card waits" : "cards wait"} to sync back to the source. Agents update the source through Connect.`}</Notice> : null}
           {spent || loose ? (
             <p className="tb-soft kb-spent">

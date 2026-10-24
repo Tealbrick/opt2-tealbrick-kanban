@@ -5865,7 +5865,7 @@
     {
       "id": "usage_report",
       "title": "Report token usage of a turn (runtime)",
-      "description": "Called by the agent runtime (tealbrick agent serve) after each turn, not by you: the turn's token numbers and model, never text. Task Board adds them to the issue the turn worked on (the issue named, else the issues you changed during the turn, else your one in-progress issue). Information only: no limit, warning or hold is ever based on it.",
+      "description": "Called by the agent runtime (tealbrick agent serve) after each turn, not by you: the turn's token numbers and model, never text. Task Board adds them to the issue the turn worked on (the issue named, which must be one you can read, else the issues you changed during the turn, else your one in-progress issue). Information only: no limit, warning or hold is ever based on it.",
       "audience": "agent",
       "scopeType": "project",
       "crud": [
@@ -5890,7 +5890,8 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "description": "The runtime's turn key; a repeat is a duplicate."
+            "description": "The runtime's turn key; a repeat is a duplicate.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
           },
           "startedAt": {
             "type": "string",
@@ -5913,7 +5914,9 @@
           "model": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 400
+            "maxLength": 400,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@\\[\\],-]*$",
+            "description": "Model name(s), comma-separated; names only (a pattern refuses free text)."
           },
           "inputTokens": {
             "type": "integer",
@@ -5950,7 +5953,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "description": "The issue the turn was started for, when the runtime knows it."
+            "description": "The issue the turn was started for, when the runtime knows it. An issue you cannot read is refused (not_found)."
           }
         }
       },
@@ -7172,7 +7175,7 @@
     {
       "id": "board_project_create",
       "title": "New project",
-      "description": "Create a project. Shared projects are offered to agents through the shared default grant.",
+      "description": "Create a project. A new project is private (per-agent grants) unless shared is true; shared projects are offered to every agent through the shared default grant. Only the Team board is shared by default.",
       "input": {
         "type": "object",
         "additionalProperties": false,
@@ -7191,7 +7194,8 @@
             "maxLength": 4000
           },
           "shared": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Default false: the project is visible only to agents the owner grants."
           }
         }
       },

@@ -445,12 +445,8 @@ export const handlers = {
       const a = await prepare(ctx);
       // numbers of an agent's own turns only; an app caller has no turns of its own here
       if (a.kind !== "agent") throw new TbError("agents_only", "usage is reported for agent turns only", 403);
-      // a named issue the caller cannot read is ignored (attribution falls through), never an error: nothing leaks
-      let explicit: string | undefined;
-      if (i.issue) {
-        const r = issueRow(ctx.db, i.issue);
-        if (r && (await ctx.scope.can(PROJECT_SCOPE, String(r.project), "read"))) explicit = i.issue;
-      }
+      // C335 (2): a named issue outside the caller's grant is refused, the same not_found as a missing one (nothing leaks)
+      const explicit = i.issue ? String((await needIssue(ctx, i.issue, "read")).id) : undefined;
       const projects = await ctx.scope.readable(PROJECT_SCOPE);
       const { issue: _issue, ...report } = i;
       return tx(ctx, () => recordUsage(ctx.db, a.id, report, { explicit, projects }));
@@ -491,7 +487,8 @@ export const handlers = {
   }),
   [OP.boardProjectCreate]: op<BoardProjectCreateInput, unknown>({
     async run(i, ctx) {
-      const shared = i.shared ?? true;
+      // C335 (1): only the auto-made Team board is shared by default; every other project keeps per-grant visibility
+      const shared = i.shared ?? false;
       const p = tx(ctx, () => insertProject(ctx.db, { id: newProjectId(), name: i.name, summary: i.summary, shared, ownerAgent: null }, actorOf(ctx)));
       await ctx.scopes.instances.create(PROJECT_SCOPE, p.id, p.name, { shared });
       return { project: p };
