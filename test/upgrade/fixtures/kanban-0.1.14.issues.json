@@ -1,6 +1,6 @@
 [
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K484",
+    "id": "iss_01M5XE98036019FQGW94VJKNVY",
     "project": "prj_01JA0000000000000000000TEAM",
     "title": "Write the spec",
     "summary": "doc",
@@ -12,7 +12,7 @@
       "id": "agt_01JA0000000000000000000HEN",
       "name": "Henry"
     },
-    "goal": "gol_01M5XDVMWEY64PZ7GSVAP0K482",
+    "goal": "gol_01M5XE98036019FQGW94VJKNVW",
     "template": null,
     "dependsOn": [],
     "blockedReason": null,
@@ -33,7 +33,7 @@
     "completedAt": "2026-10-20T09:18:00.000Z"
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K486",
+    "id": "iss_01M5XE98036019FQGW94VJKNW0",
     "project": "prj_01JA0000000000000000000TEAM",
     "title": "Build it",
     "summary": "",
@@ -48,7 +48,7 @@
     "goal": null,
     "template": "build",
     "dependsOn": [
-      "iss_01M5XDVMWEY64PZ7GSVAP0K484"
+      "iss_01M5XE98036019FQGW94VJKNVY"
     ],
     "blockedReason": null,
     "result": null,
@@ -63,7 +63,7 @@
     "completedAt": null
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K488",
+    "id": "iss_01M5XE98036019FQGW94VJKNW2",
     "project": "prj_01JA0000000000000000000TEAM",
     "title": "Owner task",
     "summary": "",
@@ -91,7 +91,7 @@
     "completedAt": null
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K48A",
+    "id": "iss_01M5XE98036019FQGW94VJKNW4",
     "project": "prj_01JA0000000000000000000TEAM",
     "title": "Needs a key",
     "summary": "",
@@ -119,7 +119,7 @@
     "completedAt": null
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K48D",
+    "id": "iss_01M5XE98036019FQGW94VJKNW7",
     "project": "prj_01JA0000000000000000000TEAM",
     "title": "Review copy",
     "summary": "",
@@ -147,7 +147,7 @@
     "completedAt": null
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K48Q",
+    "id": "iss_01M5XE98036019FQGW94VJKNWH",
     "project": "agt_01JA0000000000000000000HEN",
     "title": "Private step",
     "summary": "",
@@ -175,7 +175,7 @@
     "completedAt": null
   },
   {
-    "id": "iss_01M5XDVMWEY64PZ7GSVAP0K48S",
+    "id": "iss_01M5XE98036019FQGW94VJKNWK",
     "project": "prj_01JA0000000000000000000LNCH",
     "title": "Unassigned launch work",
     "summary": "",

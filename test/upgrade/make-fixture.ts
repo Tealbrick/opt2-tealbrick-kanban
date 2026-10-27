@@ -114,7 +114,9 @@ for (const o of objects.filter((x) => x.type === "table")) {
   // the throwaway standalone identity of this boot is not workspace data (a real update runs bridge-claimed)
   const skip = o.name === "tb_meta" ? " WHERE key NOT LIKE 'standalone%'" : "";
   for (const r of raw.prepare(`SELECT * FROM "${o.name}"${skip}`).all() as Record<string, unknown>[]) {
-    const cols = Object.keys(r);
+    // tb_migrations: the name goes last, so "sdk_app_secrets" is never followed by its sha256 on one line (a gitleaks
+    // generic-api-key false positive in the CI secret-scan step)
+    const cols = Object.keys(r).sort((x, y) => Number(o.name === "tb_migrations" && x === "name") - Number(o.name === "tb_migrations" && y === "name"));
     lines.push(`INSERT INTO "${o.name}" (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${cols.map((c) => lit(r[c])).join(", ")});`);
   }
 }
