@@ -54,7 +54,7 @@ New code is TypeScript (Node 24+). Swift only where the macOS app requires it.
 | `scripts/build-ui.ts` | UI build without a bundler (tsc output + vendored modules + import map) |
 | `gen/` (not committed) | `tb-gen` output; `node --run kit` generates the kit and compiles it to `dist/kit` (`#kit` import) |
 | `Dockerfile` | `node:24-slim` pinned by digest, pnpm build to `dist/`, non-root, `CMD ["node", "dist/main.js"]` |
-| `.woodpecker/ci.yaml`, `.github/workflows/opt2-release.yml` | the opt2 CI template ci-v9.9, generated from `Tealbrick/opt2-tealbrick-platform`; do not edit |
+| `.woodpecker/ci.yaml`, `.github/workflows/opt2-release.yml` | the opt2 CI template ci-v9.21, generated from `Tealbrick/opt2-tealbrick-platform`; do not edit |
 | `tealbrick-ci.json` | CI settings: kind `miniapp`, one image |
 | `conformance.start.ts` | boots the app for `tb-conformance` |
 | `test/` | store rules (`board.test.ts`), app and handler checks (`app.test.ts`), UI checks |

@@ -1,0 +1,9 @@
+{
+  "$comment": "Conformance fixtures (tb-conformance app). eventsProbe (conformance >= 0.1.28, SDK-API section 20): the person op events_probe drives ctx.emit for A-EV-1..8; it runs only under conformance.start.ts. Every Task Board event is scoped on a project: the fixture instance is agent A's own project (project id = agent id).",
+  "eventsProbe": {
+    "op": "events_probe",
+    "event": "issue.assigned",
+    "scopedEvent": "issue.assigned",
+    "instanceId": "${tb.agentA}"
+  }
+}

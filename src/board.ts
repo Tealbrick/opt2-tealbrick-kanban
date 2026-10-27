@@ -5,8 +5,12 @@
 // One status vocabulary (C83): backlog, todo, in_progress, in_review, blocked, done. "ready" is computed, never stored:
 // an issue is ready when it is in todo and every issue it depends on is done. When an issue becomes ready because a
 // dependency was completed, unlinked or deleted, the activity log records a `promoted` entry on it.
+//
+// App events (C274 S4, ./events.ts): the change functions take an optional `EventSink` as their last argument and report
+// assignments, unblocks and comments to it inside the caller's transaction; the op handlers turn those into `ctx.emit`.
 import { ulid } from "@opt2-tealbrick/manifest";
 import { type Db, TbError } from "@opt2-tealbrick/miniapp-sdk";
+import type { EventSink, UnblockCause } from "./events.ts";
 
 export const PROJECT_SCOPE = "project";
 export const STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done"] as const;
@@ -552,14 +556,25 @@ function checkLink(db: Db, issue: Row, target: string): void {
   if (wouldCycle(db, String(issue.id), target)) throw invalid("link_cycle", "this dependency would create a cycle");
 }
 
-/** Logs `promoted` on each listed issue that is ready now and was not before. */
-function promote(db: Db, before: Map<string, boolean>, actor: Actor, cause: string, now: number): string[] {
+/** Logs `promoted` on each listed issue that is ready now and was not before, and tells its assignee (`issue.unblocked`). */
+function promote(db: Db, before: Map<string, boolean>, actor: Actor, cause: string, now: number, ev?: { sink?: EventSink; cause: UnblockCause; by: string }): string[] {
   const out: string[] = [];
   for (const [id, was] of before) {
     const r = issueRow(db, id);
     if (!r || was || !isReady(db, id, String(r.status))) continue;
     logActivity(db, { project: String(r.project), issue: id, actor, kind: "promoted", summary: `Ready: ${cause}` }, now);
     out.push(id);
+    if (ev?.sink && r.assignee_kind)
+      ev.sink({
+        type: "unblocked",
+        issue: id,
+        project: String(r.project),
+        title: String(r.title),
+        status: String(r.status) as Status,
+        cause: ev.cause,
+        unblockedBy: ev.by,
+        to: { kind: String(r.assignee_kind), id: String(r.assignee_id) },
+      });
   }
   return out;
 }
@@ -576,7 +591,7 @@ export interface IssueInput {
   template?: string;
   dependsOn?: readonly string[];
 }
-export function createIssue(db: Db, i: IssueInput, actor: Actor, now = Date.now()): IssueView {
+export function createIssue(db: Db, i: IssueInput, actor: Actor, now = Date.now(), sink?: EventSink): IssueView {
   if (!projectRow(db, i.project)) throw notFound("project");
   checkGoal(db, i.goal, i.project);
   const id = `iss_${ulid(now)}`;
@@ -610,6 +625,7 @@ export function createIssue(db: Db, i: IssueInput, actor: Actor, now = Date.now(
   }
   const who = i.assignee ? ` for ${actorOf(db, i.assignee.kind, i.assignee.id).name}` : "";
   logActivity(db, { project: i.project, issue: id, actor, kind: "issue_created", summary: `Created "${i.title}" in ${status}${who}` }, now);
+  if (sink && i.assignee) sink({ type: "assigned", issue: id, project: i.project, title: i.title, status, reason: "created", to: i.assignee });
   return toIssue(db, issueRow(db, id) as Row);
 }
 
@@ -624,8 +640,10 @@ export interface IssuePatch {
   result?: string;
 }
 /** One update = one activity record listing the changed fields; no-op changes write nothing. Leaving `blocked` clears
- *  the reason; leaving `done` clears completedAt (reopen) — dependents stop being ready, computed. */
-export function updateIssue(db: Db, id: string, p: IssuePatch, actor: Actor, now = Date.now()): { issue: IssueView; promoted: string[] } {
+ *  the reason; leaving `done` clears completedAt (reopen) — dependents stop being ready, computed.
+ *  Events: a new agent assignee gets `issue.assigned`; otherwise leaving `blocked` tells the assignee `issue.unblocked`
+ *  (one event per change and agent); dependents that became ready tell theirs (`dependency_done`). */
+export function updateIssue(db: Db, id: string, p: IssuePatch, actor: Actor, now = Date.now(), sink?: EventSink): { issue: IssueView; promoted: string[] } {
   const r = issueRow(db, id);
   if (!r) throw notFound("issue");
   const project = String(r.project);
@@ -657,8 +675,8 @@ export function updateIssue(db: Db, id: string, p: IssuePatch, actor: Actor, now
   if (next.summary !== r.summary) changes.push("summary");
   if (next.status !== r.status) changes.push(`status ${String(r.status)} → ${next.status}`);
   if (next.priority !== r.priority) changes.push(`priority ${next.priority}`);
-  if (next.assigneeKind !== strOrNull(r.assignee_kind) || next.assigneeId !== strOrNull(r.assignee_id))
-    changes.push(next.assigneeKind ? `assigned to ${actorOf(db, next.assigneeKind, next.assigneeId).name}` : "unassigned");
+  const reassigned = next.assigneeKind !== strOrNull(r.assignee_kind) || next.assigneeId !== strOrNull(r.assignee_id);
+  if (reassigned) changes.push(next.assigneeKind ? `assigned to ${actorOf(db, next.assigneeKind, next.assigneeId).name}` : "unassigned");
   if (next.goal !== strOrNull(r.goal)) changes.push(next.goal ? "goal set" : "goal cleared");
   if (next.blockedReason !== strOrNull(r.blocked_reason) && next.blockedReason) changes.push(`blocked: ${next.blockedReason}`);
   if (next.result !== strOrNull(r.result)) changes.push(next.result ? `result: ${next.result.split("\n")[0]}` : "result cleared");
@@ -672,7 +690,12 @@ export function updateIssue(db: Db, id: string, p: IssuePatch, actor: Actor, now
   ).run(next.title, next.summary, next.status, next.priority, next.assigneeKind, next.assigneeId, next.goal, next.blockedReason, next.result, next.completedAt, now, id);
   const kind = next.status !== r.status ? (next.status === "done" ? "completed" : next.status === "blocked" ? "blocked" : "moved") : "updated";
   logActivity(db, { project, issue: id, actor, kind, summary: changes.join("; ") }, now);
-  const promoted = promote(db, before, actor, `"${next.title}" is done`, now);
+  if (sink && next.assigneeKind && next.assigneeId) {
+    const to = { kind: next.assigneeKind, id: next.assigneeId };
+    if (reassigned) sink({ type: "assigned", issue: id, project, title: next.title, status: next.status, reason: "reassigned", to });
+    else if (r.status === "blocked" && next.status !== "blocked") sink({ type: "unblocked", issue: id, project, title: next.title, status: next.status, cause: "status_change", to });
+  }
+  const promoted = promote(db, before, actor, `"${next.title}" is done`, now, { sink, cause: "dependency_done", by: id });
   return { issue: toIssue(db, issueRow(db, id) as Row), promoted };
 }
 
@@ -688,7 +711,7 @@ export function linkIssue(db: Db, id: string, target: string, actor: Actor, now 
   }
   return toIssue(db, issueRow(db, id) as Row);
 }
-export function unlinkIssue(db: Db, id: string, target: string, actor: Actor, now = Date.now()): IssueView {
+export function unlinkIssue(db: Db, id: string, target: string, actor: Actor, now = Date.now(), sink?: EventSink): IssueView {
   const r = issueRow(db, id);
   if (!r) throw notFound("issue");
   const before = readiness(db, [id]);
@@ -697,12 +720,13 @@ export function unlinkIssue(db: Db, id: string, target: string, actor: Actor, no
     const t = issueRow(db, target);
     db.prepare("UPDATE issues SET updated_at = ? WHERE id = ?").run(now, id);
     logActivity(db, { project: String(r.project), issue: id, actor, kind: "unlinked", summary: `No longer depends on "${t ? String(t.title) : target}"` }, now);
-    promote(db, before, actor, "a dependency was removed", now);
+    promote(db, before, actor, "a dependency was removed", now, { sink, cause: "dependency_removed", by: target });
   }
   return toIssue(db, issueRow(db, id) as Row);
 }
 
-export function addComment(db: Db, id: string, body: string, actor: Actor, now = Date.now()): CommentView {
+/** Events: the assignee and the creator (agents, never the author) get `issue.commented`. */
+export function addComment(db: Db, id: string, body: string, actor: Actor, now = Date.now(), sink?: EventSink): CommentView {
   const r = issueRow(db, id);
   if (!r) throw notFound("issue");
   const text = body.trim();
@@ -719,6 +743,11 @@ export function addComment(db: Db, id: string, body: string, actor: Actor, now =
   );
   db.prepare("UPDATE issues SET updated_at = ? WHERE id = ?").run(now, id);
   logActivity(db, { project: String(r.project), issue: id, actor, kind: "commented", summary: `Comment: ${text.split("\n")[0]}` }, now);
+  const parties = [
+    ...(r.assignee_kind ? [{ kind: String(r.assignee_kind), id: String(r.assignee_id) }] : []),
+    { kind: String(r.created_by_kind), id: String(r.created_by_id) },
+  ];
+  sink?.({ type: "commented", issue: id, project: String(r.project), commentId: cid, body: text, to: parties });
   return { id: cid, issue: id, author: actor, body: text, createdAt: iso(now) };
 }
 export function listComments(db: Db, id: string): CommentView[] {
@@ -761,11 +790,11 @@ function purgeIssue(db: Db, id: string): void {
   db.prepare("DELETE FROM issues WHERE id = ?").run(id);
 }
 /** Deletes the issue, its comments, references and activity; dependents lose the link (and may become ready). */
-export function deleteIssue(db: Db, id: string, actor: Actor, now = Date.now()): void {
+export function deleteIssue(db: Db, id: string, actor: Actor, now = Date.now(), sink?: EventSink): void {
   const r = issueRow(db, id);
   if (!r) throw notFound("issue");
   const before = readiness(db, dependents(db, id));
   purgeIssue(db, id);
   logActivity(db, { project: String(r.project), issue: null, actor, kind: "issue_deleted", summary: `Deleted "${String(r.title)}"` }, now);
-  promote(db, before, actor, `dependency "${String(r.title)}" was deleted`, now);
+  promote(db, before, actor, `dependency "${String(r.title)}" was deleted`, now, { sink, cause: "dependency_removed", by: id });
 }

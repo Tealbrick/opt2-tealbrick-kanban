@@ -22,11 +22,11 @@ An issue is "ready" when it is `todo` and every `dependsOn` is done. Readiness i
 
 ## Operations (from `tealbrick.manifest.json`)
 
-38 operations.
+39 operations.
 - Read (agent, per project): `projects_list`, `project_get`, `goals_list`, `issues_list` (filter `template`, a lowercase key for repeated work; Evolution's detector relies on it), `issue_get`, `activity_list`, `work_next`, `sync_pending`.
 - Write (agent): `issues_import`, `issue_sync_ack`, `usage_report`, `project_update`, `goal_create`, `goal_update`, `issue_create`, `issue_update`, `issue_comment_add`, `issue_link`, `issue_unlink`, `issue_block`, `issue_complete`, `issue_document_link`, `issue_document_unlink`.
 - Destructive, hold `destructive`: `project_delete`, `goal_delete`, `issue_delete`.
-- Person: `board_view`, `board_issue`, 8 writes, 2 destructive (held).
+- Person: `board_view`, `board_issue`, 8 writes, 2 destructive (held); `events_probe` (conformance only: the production handler answers `not_found`, only `conformance.start.ts` runs the probe that the A-EV rows need).
 
 ## Scopes, hooks and companions
 
@@ -60,7 +60,7 @@ Port 8080. 0.25 cpu, 256 MB. Data 1 GB plus backup 2 GB (3 GB merged). Backup cr
 
 ## Pinned packages
 
-miniapp-sdk 0.1.25, manifest 0.1.18, conformance 0.1.18, ui 0.2.4 (no direct spec dependency).
+miniapp-sdk 0.1.40, manifest 0.1.31, conformance 0.1.30, ui 0.2.4 (no direct spec dependency). Re-pin miniapp-sdk 0.1.41 / manifest 0.1.32 when they are released, if needed.
 
 All `@opt2-tealbrick/*` pins use dist-host tarball URLs. Upgrade safety (SDK 0.1.25: pre-update snapshot, migration lock, failed mode) is in this app on `main` (0.1.13, dev channel; its qa1 soak is the gate for stable, C221). The stable release 0.1.12 pins SDK 0.1.22, so Core can roll back an update of that version only as an image (no data restore) until a stable version with SDK 0.1.25 ships (after the qa1 soak).
 
@@ -69,6 +69,16 @@ All `@opt2-tealbrick/*` pins use dist-host tarball URLs. Upgrade safety (SDK 0.1
 - **Import (C331(6))**: `issues_import` is the one sink for every path (agents now; Observer or an owner import over a Connect `tasks/1` dataset later). Key = (project, system, externalId). Same etag = unchanged; a changed etag updates title/summary; a changed source status applies only while the board still has the last agreed status, else `conflict` and the board keeps its status. `sync_pending` lists cards done here and not done in the source; the agent updates the source through Connect and calls `issue_sync_ack` (or sends `error`).
 - **Token use (C331(7), C327)**: the agent runtime (`tealbrick agent serve`) calls `usage_report` after each turn. Attribution: the issue named, else the issues the agent changed during the turn (split evenly), else its single in-progress issue, else unattributed per agent. Totals on `issue_get`, `board_issue`, `board_view`. A named issue outside the caller's grant is refused `not_found`; the schema refuses unknown fields and free-text `turn`/`model`, so no prompt or response text can be stored. Information only: no budget, warning or hold reads these numbers. Unattributed turns are pruned after 90 days; an issue's usage goes with the issue.
 - **Team board**: (C335) only the Team board is shared by default; owner projects are private unless the owner turns sharing on. One shared project made once when the workspace has none, so every agent (and a read-only reader) sees shared work without per-project owner grants. `board_view {project: "all"}` shows every project.
+
+## Events (0.1.15, C274 S4)
+
+Task Board wakes agents through app events (MANIFEST §16, SDK-API §20, `src/events.ts`). Each event is targeted (`to` = agents only; never the owner, an app or the agent that made the change) and scoped on the issue's project (`visibleWith: issue_get`, `instanceId` = project id), so only agents whose project row admits `read` receive it.
+- `kanban.issue.assigned` to the new agent assignee: `issue_create` / `board_issue_create` with an agent assignee, `issue_update` / `board_issue_update` that changes the assignee to an agent. Data `{projectId, status, reason: created|reassigned, by}`.
+- `kanban.issue.unblocked` to the assignee: the issue leaves `blocked` (`cause: status_change`), or becomes ready because a dependency was done (`dependency_done`) or unlinked/deleted (`dependency_removed`); `unblockedBy` = that dependency. A change that also reassigns sends only `issue.assigned`.
+- `kanban.issue.commented` to the assignee and the creator (agents), minus the author: `issue_comment_add`, `board_comment_add`. Data `{projectId, commentId, by}`.
+- Summary = the issue title, or "<author name>: <comment start>", at most 280 characters, always `untrusted: true`. Agents read details with `issue_get` (a policy hook may strip summaries).
+- The store functions (`board.ts`, `sync.ts`) report events to an optional sink inside the change's transaction, so owner and agent ops emit the same way and a rolled-back change emits nothing. `issues_import` emits through the same functions. Deleting a project calls `ctx.purgeEvents(projectId)` in the delete transaction. `tb.hold.decided` (held deletes) comes from the SDK.
+- Upgrade: no app migration; the SDK adds its outbox table (schema step 11). `test/upgrade/` boots 0.1.14 and 0.1.14-dev.1 data on the current code. The Agents & scopes grid shows an offer (`offer.adds`) after an app update widens a level and accepts it only on the owner's click (C283d).
 
 ## Known gaps
 
