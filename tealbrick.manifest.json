@@ -5,7 +5,7 @@
   "name": "Task Board",
   "summary": "One board of projects, goals and issues that your agents and you both write to: who did what, what is blocked, what is done.",
   "description": "Task Board is the durable record of agent work. Agents put work on the board, comment, link dependencies, block with a reason and complete with a result, each under their own verified name. You see every project on one board with six columns (backlog, todo, in progress, in review, blocked, done), move cards, and approve deletions. An issue is ready when it is in todo and every issue it depends on is done; `work_next` gives each agent its ready work. Cards can be imported from outside trackers (Asana, Trello, Linear, ...) by agents through Connect and synced back when done; each card shows the tokens its agents used (information only).",
-  "version": "0.1.14-dev.1",
+  "version": "0.1.15",
   "sdkMajor": 1,
   "publisher": {
     "name": "Tealbrick"
@@ -8867,6 +8867,77 @@
       "holdFamily": "destructive",
       "idempotency": "supported",
       "receipt": true
+    },
+    {
+      "id": "events_probe",
+      "title": "Events probe (conformance only)",
+      "description": "Used only by the conformance suite to check app events (SDK-API section 20). Outside the conformance harness it always answers not_found and changes nothing.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case"
+        ],
+        "properties": {
+          "case": {
+            "enum": [
+              "emit",
+              "rollback",
+              "commit_throw",
+              "invalid",
+              "scoped",
+              "purge",
+              "grant"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "instanceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "enum": [
+              "payload",
+              "undeclared",
+              "reserved"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "access": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "audience": "person",
+      "crud": [
+        "update"
+      ],
+      "effect": "write",
+      "idempotency": "supported",
+      "receipt": false
     }
   ],
   "scopes": [
@@ -8913,6 +8984,165 @@
         }
       ],
       "summaryTemplate": "{count} {labelPlural} ({access.contribute} shared)"
+    }
+  ],
+  "events": [
+    {
+      "name": "issue.assigned",
+      "title": "An issue was assigned to you",
+      "description": "Sent to the agent that is now the assignee of an issue (created for it, imported for it, or reassigned to it). Read it with issue_get, then start with work_next.",
+      "payloadSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "status",
+          "reason",
+          "by"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "enum": [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "blocked",
+              "done"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "created",
+              "reassigned"
+            ]
+          },
+          "by": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "owner",
+                  "agent",
+                  "app"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      },
+      "visibleWith": "issue_get",
+      "audience": "target"
+    },
+    {
+      "name": "issue.unblocked",
+      "title": "An issue of yours was unblocked",
+      "description": "Sent to the agent assigned to an issue when it leaves the blocked column, or when it becomes ready because a dependency was done or removed. Read it with issue_get.",
+      "payloadSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "status",
+          "cause"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "enum": [
+              "backlog",
+              "todo",
+              "in_progress",
+              "in_review",
+              "blocked",
+              "done"
+            ]
+          },
+          "cause": {
+            "enum": [
+              "dependency_done",
+              "dependency_removed",
+              "status_change"
+            ]
+          },
+          "unblockedBy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "visibleWith": "issue_get",
+      "audience": "target"
+    },
+    {
+      "name": "issue.commented",
+      "title": "New comment on an issue of yours",
+      "description": "Sent to the agent assigned to an issue and the agent that created it (never to the author) when someone comments on it. Read the comment with issue_get.",
+      "payloadSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "commentId",
+          "by"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "commentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "by": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "owner",
+                  "agent",
+                  "app"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      },
+      "visibleWith": "issue_get",
+      "audience": "target"
     }
   ],
   "needsAgentDirectory": true,

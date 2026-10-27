@@ -1,10 +1,18 @@
 // Agents & scopes: the access grid, one Select per agent and project. It is the `render` of the shared AgentsPage, so
 // the heading, loading, load error and empty state come from ./standard.tsx.
+// C283d (SDK >= 0.1.36): when an app update widened a level, the owner row keeps its old rights and carries `offer.adds`.
+// The grid shows what the update would add and accepts it ONLY on the owner's click on "Allow" (never on load, never silently).
+
+import type { CrudAction } from "@opt2-tealbrick/manifest";
 import { useScopes } from "@opt2-tealbrick/miniapp-sdk/client";
 import { Button, EmptyState, Field, Notice, Select, Swatch, Tag } from "@opt2-tealbrick/ui";
 import { useCallback, useEffect, useState } from "react";
 import { explain, type Project, run } from "./api.ts";
 import type { Agent } from "./standard.tsx";
+
+/** Plain words for the CRUD actions an offer adds. */
+const ACTION_WORDS: Record<string, string> = { read: "read", create: "add", update: "change", delete: "delete" };
+export const offerText = (adds: readonly string[]) => `This update lets the agent also ${adds.map((a) => ACTION_WORDS[a] ?? a).join(", ")} here.`;
 
 const ACCESS = [
   { value: "", label: "No access" },
@@ -14,7 +22,7 @@ const ACCESS = [
 ];
 
 export function ScopeGrid({ agents }: { agents: readonly Agent[] }) {
-  const { access, set } = useScopes();
+  const { access, set, acceptOffer } = useScopes();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +54,19 @@ export function ScopeGrid({ agents }: { agents: readonly Agent[] }) {
     );
   }
   if (!projects.length) return <EmptyState title="No projects yet">Create a project on the Board, then choose here which agents can use it.</EmptyState>;
-  const level = (agent: string, project: string) => access.find((r) => r.agent === agent && r.type === "project" && r.instanceId === project)?.access ?? "";
+  const row = (agent: string, project: string) => access.find((r) => r.agent === agent && r.type === "project" && r.instanceId === project);
+  const level = (agent: string, project: string) => row(agent, project)?.access ?? "";
+  const allow = async (agent: string, project: string, adds: CrudAction[]) => {
+    setBusy(`${agent}|${project}`);
+    setError(null);
+    try {
+      await acceptOffer(agent as never, "project", project, adds);
+    } catch (e) {
+      setError(explain(e));
+    } finally {
+      setBusy(null);
+    }
+  };
   const change = async (agent: string, project: string, value: string) => {
     setBusy(`${agent}|${project}`);
     setError(null);
@@ -75,17 +95,30 @@ export function ScopeGrid({ agents }: { agents: readonly Agent[] }) {
               {a.status === "paused" ? <Tag status="needs-you">paused</Tag> : null}
             </div>
             <div className="kb-grants">
-              {projects.map((p) => (
-                <Field key={p.id} label={p.name}>
-                  <Select
-                    aria-label={`${a.name} access to ${p.name}`}
-                    options={ACCESS}
-                    value={level(a.id, p.id)}
-                    disabled={busy === `${a.id}|${p.id}`}
-                    onValueChange={(v) => void change(a.id, p.id, v)}
-                  />
-                </Field>
-              ))}
+              {projects.map((p) => {
+                const adds = row(a.id, p.id)?.offer?.adds ?? [];
+                return (
+                  <Field key={p.id} label={p.name}>
+                    <Select
+                      aria-label={`${a.name} access to ${p.name}`}
+                      options={ACCESS}
+                      value={level(a.id, p.id)}
+                      disabled={busy === `${a.id}|${p.id}`}
+                      onValueChange={(v) => void change(a.id, p.id, v)}
+                    />
+                    {adds.length ? (
+                      <Notice tone="needs-you">
+                        <span className="tb-row">
+                          <span>{offerText(adds)}</span>
+                          <Button size="sm" disabled={busy === `${a.id}|${p.id}`} onClick={() => void allow(a.id, p.id, adds)} aria-label={`Allow ${a.name} the new rights in ${p.name}`}>
+                            Allow
+                          </Button>
+                        </span>
+                      </Notice>
+                    ) : null}
+                  </Field>
+                );
+              })}
             </div>
           </section>
         ))}

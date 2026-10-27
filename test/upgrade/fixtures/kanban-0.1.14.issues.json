@@ -1,0 +1,201 @@
+[
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNVY",
+    "project": "prj_01JA0000000000000000000TEAM",
+    "title": "Write the spec",
+    "summary": "doc",
+    "status": "done",
+    "priority": "high",
+    "ready": false,
+    "assignee": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "goal": "gol_01M5XE98036019FQGW94VJKNVW",
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": null,
+    "result": "Spec in docs/spec.md",
+    "documents": [
+      {
+        "id": "doc_01JA0000000000000000000SPC",
+        "title": "Spec draft"
+      }
+    ],
+    "createdBy": {
+      "kind": "owner",
+      "id": "per_01JA0000000000000000000MAR",
+      "name": "Owner"
+    },
+    "createdAt": "2026-10-20T09:08:00.000Z",
+    "updatedAt": "2026-10-20T09:18:00.000Z",
+    "completedAt": "2026-10-20T09:18:00.000Z"
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNW0",
+    "project": "prj_01JA0000000000000000000TEAM",
+    "title": "Build it",
+    "summary": "",
+    "status": "todo",
+    "priority": "medium",
+    "ready": true,
+    "assignee": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000TMP",
+      "name": "Tempo"
+    },
+    "goal": null,
+    "template": "build",
+    "dependsOn": [
+      "iss_01M5XE98036019FQGW94VJKNVY"
+    ],
+    "blockedReason": null,
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "createdAt": "2026-10-20T09:09:00.000Z",
+    "updatedAt": "2026-10-20T09:15:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNW2",
+    "project": "prj_01JA0000000000000000000TEAM",
+    "title": "Owner task",
+    "summary": "",
+    "status": "backlog",
+    "priority": "low",
+    "ready": false,
+    "assignee": {
+      "kind": "owner",
+      "id": "owner",
+      "name": "Owner"
+    },
+    "goal": null,
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": null,
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "owner",
+      "id": "per_01JA0000000000000000000MAR",
+      "name": "Owner"
+    },
+    "createdAt": "2026-10-20T09:10:00.000Z",
+    "updatedAt": "2026-10-20T09:10:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNW4",
+    "project": "prj_01JA0000000000000000000TEAM",
+    "title": "Needs a key",
+    "summary": "",
+    "status": "blocked",
+    "priority": "medium",
+    "ready": false,
+    "assignee": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "goal": null,
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": "Waiting for the API key",
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "createdAt": "2026-10-20T09:11:00.000Z",
+    "updatedAt": "2026-10-20T09:12:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNW7",
+    "project": "prj_01JA0000000000000000000TEAM",
+    "title": "Review copy",
+    "summary": "",
+    "status": "in_review",
+    "priority": "medium",
+    "ready": false,
+    "assignee": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000TMP",
+      "name": "Tempo"
+    },
+    "goal": null,
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": null,
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "app",
+      "id": "ins_01JA0000000000000000000OBS",
+      "name": "Observer (app)"
+    },
+    "createdAt": "2026-10-20T09:13:00.000Z",
+    "updatedAt": "2026-10-20T09:14:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNWH",
+    "project": "agt_01JA0000000000000000000HEN",
+    "title": "Private step",
+    "summary": "",
+    "status": "in_progress",
+    "priority": "medium",
+    "ready": false,
+    "assignee": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "goal": null,
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": null,
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "agent",
+      "id": "agt_01JA0000000000000000000HEN",
+      "name": "Henry"
+    },
+    "createdAt": "2026-10-20T09:19:00.000Z",
+    "updatedAt": "2026-10-20T09:19:00.000Z",
+    "completedAt": null
+  },
+  {
+    "id": "iss_01M5XE98036019FQGW94VJKNWK",
+    "project": "prj_01JA0000000000000000000LNCH",
+    "title": "Unassigned launch work",
+    "summary": "",
+    "status": "todo",
+    "priority": "medium",
+    "ready": true,
+    "assignee": null,
+    "goal": null,
+    "template": null,
+    "dependsOn": [],
+    "blockedReason": null,
+    "result": null,
+    "documents": [],
+    "createdBy": {
+      "kind": "owner",
+      "id": "per_01JA0000000000000000000MAR",
+      "name": "Owner"
+    },
+    "createdAt": "2026-10-20T09:20:00.000Z",
+    "updatedAt": "2026-10-20T09:20:00.000Z",
+    "completedAt": null
+  }
+]

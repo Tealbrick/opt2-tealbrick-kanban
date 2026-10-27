@@ -8,6 +8,7 @@
 // item answers `conflict`.
 import { type Db, TbError } from "@opt2-tealbrick/miniapp-sdk";
 import { type Actor, createIssue, getIssue, type IssueView, invalid, issueRow, logActivity, notFound, type Priority, type Status, toIssue, updateIssue } from "./board.ts";
+import type { EventSink } from "./events.ts";
 
 export interface ImportItem {
   externalId: string;
@@ -49,7 +50,9 @@ function refRow(db: Db, project: string, system: string, externalId: string): Re
 }
 
 /** One import call (≤ 50 items, checked by the schema): create new refs, update changed ones, skip unchanged ones. */
-export function importIssues(db: Db, project: string, system: string, items: readonly ImportItem[], actor: Actor, now = Date.now()): ImportResult[] {
+/** Events: the same as createIssue / updateIssue (an import that moves a card out of blocked or completes a dependency wakes
+ *  the assignee); import items name no assignee, so an import never sends issue.assigned on its own. */
+export function importIssues(db: Db, project: string, system: string, items: readonly ImportItem[], actor: Actor, now = Date.now(), sink?: EventSink): ImportResult[] {
   const out: ImportResult[] = [];
   for (const it of items) {
     const title = it.title.trim();
@@ -60,7 +63,7 @@ export function importIssues(db: Db, project: string, system: string, items: rea
     if (!ref || !current) {
       if (ref) db.prepare("DELETE FROM issue_external WHERE issue = ?").run(ref.issue);
       const status = it.status ?? "todo";
-      const issue = createIssue(db, { project, title, summary: it.summary, status, priority: it.priority }, actor, now);
+      const issue = createIssue(db, { project, title, summary: it.summary, status, priority: it.priority }, actor, now, sink);
       db.prepare(
         `INSERT INTO issue_external (issue, project, system, external_id, url, etag, synced_status, synced_at, sync_error, imported_by_kind, imported_by_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
@@ -87,7 +90,7 @@ export function importIssues(db: Db, project: string, system: string, items: rea
       } else conflict = true;
     }
     const before = toIssue(db, current);
-    const after = updateIssue(db, id, patch, actor, now).issue;
+    const after = updateIssue(db, id, patch, actor, now, sink).issue;
     const changed = after.updatedAt !== before.updatedAt || nextSynced !== synced || (it.etag !== undefined && it.etag !== ref.etag) || url !== (ref.url ?? null);
     db.prepare("UPDATE issue_external SET url = COALESCE(?, url), etag = COALESCE(?, etag), synced_status = ?, synced_at = ? WHERE issue = ?").run(url, it.etag ?? null, nextSynced, now, id);
     if (conflict) {

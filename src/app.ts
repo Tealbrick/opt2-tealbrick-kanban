@@ -6,6 +6,9 @@
 // returns the id). Ops that name an issue or goal return null ("across projects"), and the handler checks the
 // project that owns the row with ctx.scope.can (unreadable = not found, so nothing leaks). Person calls (the owner's
 // board UI) may act on every project.
+//
+// Events (C274 S4, ./events.ts): every change handler passes `eventSink(ctx, actor)` to the store, which reports
+// assignments, unblocks and comments inside the same `ctx.db.transaction`; deleting a project purges its events.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type CrudAction, ulid } from "@opt2-tealbrick/manifest";
@@ -89,6 +92,7 @@ import {
   upsertAgent,
   upsertApp,
 } from "./board.ts";
+import { eventSink } from "./events.ts";
 import { ackSync, importIssues, pendingByProject, syncPending, systemKey } from "./sync.ts";
 import { boardUsage, issueUsage, recordUsage } from "./usage.ts";
 
@@ -213,7 +217,10 @@ export const handlers = {
       await prepare(ctx);
       await needProject(ctx, i.project, "delete");
       const p = getProject(ctx.db, i.project);
-      tx(ctx, () => deleteProject(ctx.db, i.project));
+      tx(ctx, () => {
+        deleteProject(ctx.db, i.project);
+        ctx.purgeEvents?.(i.project);
+      });
       if (p) await ctx.scopes.instances.create(PROJECT_SCOPE, p.id, `${p.name} (deleted)`.slice(0, 80), { shared: false });
       return { ok: true };
     },
@@ -291,7 +298,7 @@ export const handlers = {
       const project = ownOr(i.project, ctx.caller);
       await needProject(ctx, project, "create");
       const who = assignee(ctx, i.assignee, a);
-      return { issue: tx(ctx, () => createIssue(ctx.db, { ...i, template: templateKey(i.template), project, assignee: who }, a)) };
+      return { issue: tx(ctx, () => createIssue(ctx.db, { ...i, template: templateKey(i.template), project, assignee: who }, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.issueUpdate]: op<IssueUpdateInput, unknown>({
@@ -301,7 +308,7 @@ export const handlers = {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "update");
       const { issue: _id, assignee: as, ...rest } = i;
-      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { ...rest, assignee: assignee(ctx, as, a) }, a)).issue };
+      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { ...rest, assignee: assignee(ctx, as, a) }, a, Date.now(), eventSink(ctx, a))).issue };
     },
   }),
   [OP.issueCommentAdd]: op<IssueCommentAddInput, unknown>({
@@ -310,7 +317,7 @@ export const handlers = {
     async run(i, ctx) {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "create");
-      return { comment: tx(ctx, () => addComment(ctx.db, i.issue, i.body, a)) };
+      return { comment: tx(ctx, () => addComment(ctx.db, i.issue, i.body, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.issueLink]: op<IssueLinkInput, unknown>({
@@ -328,7 +335,7 @@ export const handlers = {
     async run(i, ctx) {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "update");
-      return { issue: tx(ctx, () => unlinkIssue(ctx.db, i.issue, i.dependsOn, a)) };
+      return { issue: tx(ctx, () => unlinkIssue(ctx.db, i.issue, i.dependsOn, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.issueBlock]: op<IssueBlockInput, unknown>({
@@ -337,7 +344,7 @@ export const handlers = {
     async run(i, ctx) {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "update");
-      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { status: "blocked", blockedReason: text(i.reason, "reason") }, a)).issue };
+      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { status: "blocked", blockedReason: text(i.reason, "reason") }, a, Date.now(), eventSink(ctx, a))).issue };
     },
   }),
   [OP.issueComplete]: op<IssueCompleteInput, unknown>({
@@ -346,7 +353,7 @@ export const handlers = {
     async run(i, ctx) {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "update");
-      return tx(ctx, () => updateIssue(ctx.db, i.issue, { status: "done", result: text(i.result, "result") }, a));
+      return tx(ctx, () => updateIssue(ctx.db, i.issue, { status: "done", result: text(i.result, "result") }, a, Date.now(), eventSink(ctx, a)));
     },
   }),
   [OP.issueDelete]: op<IssueDeleteInput, unknown>({
@@ -356,7 +363,7 @@ export const handlers = {
     async run(i, ctx) {
       const a = await prepare(ctx);
       await needIssue(ctx, i.issue, "delete");
-      tx(ctx, () => deleteIssue(ctx.db, i.issue, a));
+      tx(ctx, () => deleteIssue(ctx.db, i.issue, a, Date.now(), eventSink(ctx, a)));
       return { ok: true };
     },
   }),
@@ -416,7 +423,7 @@ export const handlers = {
       await needProject(ctx, project, "create");
       await needProject(ctx, project, "update");
       const system = systemKey(i.system);
-      return { project, system, results: tx(ctx, () => importIssues(ctx.db, project, system, i.items, a)) };
+      return { project, system, results: tx(ctx, () => importIssues(ctx.db, project, system, i.items, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.syncPending]: op<SyncPendingInput, unknown>({
@@ -505,7 +512,10 @@ export const handlers = {
     async run(i, ctx) {
       const p = getProject(ctx.db, i.project);
       if (!p) throw notFound("project");
-      tx(ctx, () => deleteProject(ctx.db, i.project));
+      tx(ctx, () => {
+        deleteProject(ctx.db, i.project);
+        ctx.purgeEvents?.(i.project);
+      });
       await ctx.scopes.instances.create(PROJECT_SCOPE, p.id, `${p.name} (deleted)`.slice(0, 80), { shared: false });
       return { ok: true };
     },
@@ -524,31 +534,42 @@ export const handlers = {
   [OP.boardIssueCreate]: op<BoardIssueCreateInput, unknown>({
     async run(i, ctx) {
       const a = actorOf(ctx);
-      return { issue: tx(ctx, () => createIssue(ctx.db, { ...i, assignee: assignee(ctx, i.assignee, a) }, a)) };
+      return { issue: tx(ctx, () => createIssue(ctx.db, { ...i, assignee: assignee(ctx, i.assignee, a) }, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.boardIssueUpdate]: op<BoardIssueUpdateInput, unknown>({
     async run(i, ctx) {
       const a = actorOf(ctx);
       const { issue: _id, assignee: as, ...rest } = i;
-      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { ...rest, assignee: assignee(ctx, as, a) }, a)).issue };
+      return { issue: tx(ctx, () => updateIssue(ctx.db, i.issue, { ...rest, assignee: assignee(ctx, as, a) }, a, Date.now(), eventSink(ctx, a))).issue };
     },
   }),
   [OP.boardIssueLink]: op<BoardIssueLinkInput, unknown>({
     async run(i, ctx) {
       const a = actorOf(ctx);
-      return { issue: tx(ctx, () => (i.remove ? unlinkIssue(ctx.db, i.issue, i.dependsOn, a) : linkIssue(ctx.db, i.issue, i.dependsOn, a))) };
+      return { issue: tx(ctx, () => (i.remove ? unlinkIssue(ctx.db, i.issue, i.dependsOn, a, Date.now(), eventSink(ctx, a)) : linkIssue(ctx.db, i.issue, i.dependsOn, a))) };
     },
   }),
   [OP.boardCommentAdd]: op<BoardCommentAddInput, unknown>({
     async run(i, ctx) {
-      return { comment: tx(ctx, () => addComment(ctx.db, i.issue, i.body, actorOf(ctx))) };
+      const a = actorOf(ctx);
+      return { comment: tx(ctx, () => addComment(ctx.db, i.issue, i.body, a, Date.now(), eventSink(ctx, a))) };
     },
   }),
   [OP.boardIssueDelete]: op<BoardIssueDeleteInput, unknown>({
     async run(i, ctx) {
-      tx(ctx, () => deleteIssue(ctx.db, i.issue, actorOf(ctx)));
+      const a = actorOf(ctx);
+      tx(ctx, () => deleteIssue(ctx.db, i.issue, a, Date.now(), eventSink(ctx, a)));
       return { ok: true };
+    },
+  }),
+
+  // ------------------------------------------------------------ conformance only
+  // SDK-API §20: the A-EV conformance rows need a person op that drives ctx.emit. The manifest declares it; this production
+  // handler refuses every call and changes nothing. Only conformance.start.ts replaces it (the suite's harness).
+  [OP.eventsProbe]: op<unknown, unknown>({
+    async run() {
+      throw notFound("operation");
     },
   }),
 } satisfies Record<OpId, HandlerSpec>;
