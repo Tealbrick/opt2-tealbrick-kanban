@@ -54,6 +54,7 @@ import {
   type UsageReportInput,
   type WorkNextInput,
 } from "#kit";
+import { guardCaller, type ListIn, listAccess } from "./access.ts";
 import {
   type Actor,
   addComment,
@@ -561,6 +562,17 @@ export const handlers = {
       const a = actorOf(ctx);
       tx(ctx, () => deleteIssue(ctx.db, i.issue, a, Date.now(), eventSink(ctx, a)));
       return { ok: true };
+    },
+  }),
+
+  // ------------------------------------------------------------ C380 Governance read (tb.access/1), appended last
+  // Companion app caller `fleet` only; changes nothing, so it never calls prepare() (no app row, no own project).
+  [OP.accessList]: op<ListIn, unknown>({
+    scope: () => null,
+    redact: () => "the access list",
+    async run(i, ctx) {
+      guardCaller(ctx);
+      return listAccess(ctx.db, i);
     },
   }),
 

@@ -5,9 +5,14 @@
 // hands them to startApp, so the key-set checks (A13) run against test roots. Production never reads that variable.
 import { applyLevelCrud, LEVEL_CRUD_ENV, parseLevelCrud } from "@opt2-tealbrick/conformance";
 import { defineApp, type HandlerSpec, type OpContext, startApp } from "@opt2-tealbrick/miniapp-sdk";
-import { definition, manifest } from "./src/app.ts";
+import { conformanceManifest, GUARDED_OPS } from "./conformance.strip.ts";
+import { definition, manifest as shipped } from "./src/app.ts";
 import { PROJECT_SCOPE } from "./src/board.ts";
 import { EVENT } from "./src/events.ts";
+
+// C380: the harness serves the shipped manifest without the guarded companion ops (conformance.strip.ts), the file the suite reads.
+const manifest = conformanceManifest(shipped);
+const handlers = Object.fromEntries(Object.entries(definition.handlers).filter(([id]) => !GUARDED_OPS.includes(id)));
 
 const AGENT_ID = /^agt_[0-9A-HJKMNP-TV-Z]{26}$/;
 
@@ -87,7 +92,7 @@ export default async function start(env: Record<string, string>): Promise<{ url:
   // TBCONF_LEVEL_CRUD; the harness serves the manifest with that change applied (absent or malformed = unchanged).
   const served = applyLevelCrud(manifest as unknown as Parameters<typeof applyLevelCrud>[0], parseLevelCrud(env[LEVEL_CRUD_ENV] ?? process.env[LEVEL_CRUD_ENV])) as unknown as typeof manifest;
   const probe: HandlerSpec = { run: (input, ctx) => eventsProbe(input as unknown as ProbeInput, ctx) as never };
-  const app = defineApp({ ...definition, manifest: served, handlers: { ...definition.handlers, events_probe: probe } });
+  const app = defineApp({ ...definition, manifest: served, handlers: { ...handlers, events_probe: probe } });
   // Port: the suite's free port (TBCONF_PORT, conformance >= 0.1.13), else manifest runtime.port.
   const harness = {
     ...(env.TBCONF_PORTAL_ROOT_KEYS ? { portalRootKeys: JSON.parse(env.TBCONF_PORTAL_ROOT_KEYS) } : {}),
