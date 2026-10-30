@@ -6,7 +6,7 @@ no longer embeds the schemas.
 
 - Source repo: `Tealbrick/opt2-tealbrick-specs` (private)
 - Contract: `tb.access/1` (docs/ACCESS.md), spec 0.1.89 (C380). Consumer: Governance (product id `fleet`). Task Board serves `access_list` only.
-- Copied from specs branch `c380/b1-access-contract` at commit `d543905ab4d387339baae16ce71a75379ff7f637` (PR open; contract not frozen until tag `spec-v0.1.89`). Re-compare with the tag before merge; the bytes must be identical.
+- Tag `spec-v0.1.89` (commit `074f1a90b77db38176b8a1eae2e7c1159db493c9`, specs#68). First copied from the PR branch at `d543905`; compared with the tag: every file is byte-identical.
 
 | File here | Path in the source repo | sha256 |
 |---|---|---|
