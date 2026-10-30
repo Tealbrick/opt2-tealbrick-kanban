@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Tealbrick/opt2-tealbrick-platform/ci-v9.21/ci/tealbrick-ci.schema.json",
+  "$schema": "https://raw.githubusercontent.com/Tealbrick/opt2-tealbrick-platform/ci-v9.23/ci/tealbrick-ci.schema.json",
   "kind": "miniapp",
   "paths": [
     "."
@@ -10,7 +10,7 @@
       "product": "kanban",
       "kind": "app",
       "manifest": "tealbrick.manifest.json",
-      "upgradeFrom": "<=0.1.14"
+      "upgradeFrom": "<=0.1.15"
     }
   ]
 }
