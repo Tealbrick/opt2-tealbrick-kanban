@@ -566,7 +566,8 @@ export const handlers = {
   }),
 
   // ------------------------------------------------------------ C380 Governance read (tb.access/1), appended last
-  // Companion app caller `fleet` only; changes nothing, so it never calls prepare() (no app row, no own project).
+  // Companion app caller `fleet` only; it changes no board data, so it never calls prepare() (no app row, no own project). The SDK itself
+  // may record the caller's default scope rows on its first call (SDK tables, not listed here).
   [OP.accessList]: op<ListIn, unknown>({
     scope: () => null,
     redact: () => "the access list",

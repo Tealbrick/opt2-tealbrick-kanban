@@ -8942,7 +8942,7 @@
     {
       "id": "access_list",
       "title": "List what agents hold here (Governance only)",
-      "description": "Governance reads what each agent holds on the Task Board: open issues assigned to it and its own project (information only). Only the Governance app can call it; anyone else is refused. It changes nothing and lists no titles or text. Which projects an agent may reach is set by the Portal, so it is named as not shown.",
+      "description": "Governance reads what each agent holds on the Task Board: open issues assigned to it and its own project (information only). Only the Governance app can call it; anyone else is refused. It changes no board data and lists no titles or text. Which projects an agent may reach is set by the Portal, so it is named as not shown.",
       "input": {
         "title": "tb.access/1 access_list input",
         "description": "Spec 0.1.89, docs/ACCESS.md. Embedded byte for byte as the op input (M-OP-8: no $id). Dialect: JSON Schema 2020-12.",

@@ -7,7 +7,7 @@ import type { HandlerSpec } from "@opt2-tealbrick/miniapp-sdk";
 import { conformanceManifest, GUARDED_OPS } from "../conformance.strip.ts";
 import { digestOf, GOVERNANCE_PRODUCT, TARGET } from "../src/access.ts";
 import { handlers, manifest } from "../src/app.ts";
-import { createIssue, insertProject, upsertAgent } from "../src/board.ts";
+import { createIssue, ensureOwnProject, insertProject, upsertAgent } from "../src/board.ts";
 import { ctxFor, migratedDb } from "./helpers.ts";
 
 const H = handlers as Record<string, HandlerSpec<any, any>>;
@@ -110,6 +110,14 @@ test("list: open assignments and own projects for an agent subject; done work an
   }
   const text = JSON.stringify(out);
   for (const secret of ["Secret launch plan", "Maybe later", "Agent A work"]) assert.equal(text.includes(secret), false, `no content leaves: ${secret}`);
+});
+
+test("sweep: an app's own project (owner_agent is an instance id) is not an agent item, and the answer still passes the schema", async () => {
+  const db = seed();
+  ensureOwnProject(db, { id: "ins_01J00000000000000000000CON", name: "Connect" });
+  const out = await list(db, { v: 1, subjects: [{ kind: "all" }] });
+  assert.deepEqual(out.items.map((i: { id: string }) => i.id), [`own_project:${A.id}`, `own_project:${B.id}`].sort());
+  assert.deepEqual(out.items.filter((i: { subject: { id: string } }) => !i.subject.id.startsWith("agt_")), []);
 });
 
 test("list: notShown names what this version cannot list, so complete is false and nothing reads as 'no access'", async () => {

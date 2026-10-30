@@ -160,7 +160,7 @@ function projectItem(r: Row): AccessItem {
 
 /**
  * One page, in item-id order. `agents` null = sweep (every agent). The page reads at most `limit + 1` rows per kind, so a sweep
- * costs one bounded query per kind per page. A subject the app cannot place (a person, `unlinked`) yields nothing.
+ * costs one bounded primary-key seek per kind per page. A subject the app cannot place (a person, `unlinked`) yields nothing.
  */
 export function listAccess(db: Db, input: ListIn, now = Date.now()): ListOut {
   const agents = agentFilter(input.subjects);
@@ -171,19 +171,23 @@ export function listAccess(db: Db, input: ListIn, now = Date.now()): ListOut {
   const ids = agents === null ? null : [...agents];
   const out: AccessItem[] = [];
   if (ids === null || ids.length > 0) {
-    const marks = ids === null ? "" : ` AND %COL% IN (${ids.map(() => "?").join(",")})`;
+    // Item ids sort `assignment:` before `own_project:`, so a cursor of kind K lets each query seek on its own primary key:
+    // assignments after an `own_project:` cursor are all behind it, projects before an `assignment:` cursor are all ahead.
+    const cut = after === null ? null : { kind: after.slice(0, after.indexOf(":")), id: after.slice(after.indexOf(":") + 1) };
+    const marks = (col: string) => (ids === null ? "" : ` AND ${col} IN (${ids.map(() => "?").join(",")})`);
     const args = ids ?? [];
-    const assignments = db
-      .prepare(
-        `SELECT id, assignee_id, status, created_at FROM issues WHERE assignee_kind = 'agent' AND status <> 'done' AND 'assignment:' || id > ?${marks.replace("%COL%", "assignee_id")} ORDER BY id LIMIT ?`,
-      )
-      .all(after ?? "", ...args, limit + 1);
+    // `own_project` is an AGENT's project: an app's own project (owner_agent = its instance id) is not an agent item
+    if (cut?.kind !== "own_project") {
+      const rows = db
+        .prepare(`SELECT id, assignee_id, status, created_at FROM issues WHERE assignee_kind = 'agent' AND status <> 'done' AND id > ?${marks("assignee_id")} ORDER BY id LIMIT ?`)
+        .all(cut?.kind === "assignment" ? cut.id : "", ...args, limit + 1);
+      for (const r of rows) if (AGENT_ID.test(String(r.assignee_id))) out.push(assignmentItem(r as Row));
+    }
     const projects = db
-      .prepare(`SELECT id, owner_agent, created_at FROM projects WHERE owner_agent IS NOT NULL AND 'own_project:' || id > ?${marks.replace("%COL%", "owner_agent")} ORDER BY id LIMIT ?`)
-      .all(after ?? "", ...args, limit + 1);
-    for (const r of assignments) out.push(assignmentItem(r as Row));
-    for (const r of projects) out.push(projectItem(r as Row));
-    out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .prepare(`SELECT id, owner_agent, created_at FROM projects WHERE owner_agent LIKE 'agt\\_%' ESCAPE '\\' AND length(owner_agent) = 30 AND id > ?${marks("owner_agent")} ORDER BY id LIMIT ?`)
+      .all(cut?.kind === "own_project" ? cut.id : "", ...args, limit + 1);
+    for (const r of projects) if (AGENT_ID.test(String(r.owner_agent))) out.push(projectItem(r as Row));
+    out.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
   }
   const page = out.slice(0, limit);
   const more = out.length > limit;
