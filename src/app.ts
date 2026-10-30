@@ -54,6 +54,7 @@ import {
   type UsageReportInput,
   type WorkNextInput,
 } from "#kit";
+import { guardCaller, type ListIn, listAccess } from "./access.ts";
 import {
   type Actor,
   addComment,
@@ -561,6 +562,18 @@ export const handlers = {
       const a = actorOf(ctx);
       tx(ctx, () => deleteIssue(ctx.db, i.issue, a, Date.now(), eventSink(ctx, a)));
       return { ok: true };
+    },
+  }),
+
+  // ------------------------------------------------------------ C380 Governance read (tb.access/1), appended last
+  // Companion app caller `fleet` only; it changes no board data, so it never calls prepare() (no app row, no own project). The SDK itself
+  // may record the caller's default scope rows on its first call (SDK tables, not listed here).
+  [OP.accessList]: op<ListIn, unknown>({
+    scope: () => null,
+    redact: () => "the access list",
+    async run(i, ctx) {
+      guardCaller(ctx);
+      return listAccess(ctx.db, i);
     },
   }),
 

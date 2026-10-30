@@ -37,3 +37,4 @@ secrets/
 gen/
 .data/
 *.tgz
+conformance.manifest.json

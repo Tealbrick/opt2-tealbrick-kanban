@@ -59,7 +59,9 @@ test("manifest shape: 6-column status vocabulary, deletes destructive, creates i
   for (const o of manifest.operations) {
     if (o.crud.includes("delete")) assert.equal(o.effect, "destructive", o.id);
     if (o.crud.includes("create")) assert.equal(o.idempotency, "required", o.id);
-    if (o.audience === "agent") assert.equal(o.scopeType, "project", o.id);
+    // C380: the Governance read (listing "workflow", an app caller with no project grant) is the one agent op with no scope
+    if (o.audience === "agent" && o.id !== "access_list") assert.equal(o.scopeType, "project", o.id);
+    if (o.id === "access_list") assert.equal(o.scopeType, undefined, o.id);
   }
   assert.deepEqual(
     manifest.scopes?.[0]?.defaultGrants.map((g) => g.kind),
