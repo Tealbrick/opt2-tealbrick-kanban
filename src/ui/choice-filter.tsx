@@ -25,7 +25,7 @@ export function useChoiceFilter(page: string, options: readonly SelectOption[], 
   const [query, setQuery] = useAccessFilter(filterKey(page));
   const filter = accessFilter(query);
   // the name alone (so ^ and $ work on it), or the name with its note such as "team"
-  const passing = options.filter((o) => filter.test(o.label) || (o.meta !== undefined && filter.test(`${o.label} ${o.meta}`)));
+  const passing = options.filter((o) => (/[\^$]|\(\?/u.test(query) ? filter.test(o.label) : filter.test(o.meta !== undefined ? `${o.label} ${o.meta}` : o.label)));
   const on = query.trim() !== "";
   const bar =
     options.length >= FILTER_FROM || on ? (
