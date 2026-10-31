@@ -4,6 +4,7 @@
 .kb-pick { flex: 0 1 220px; min-width: 160px; }
 .kb-pick-who { flex-basis: calc(var(--tb-s8) * 6 + var(--tb-s2)); } /* mockup 200px = 6 × 32 + 8 */
 .kb-grow { flex: 1; }
+.kb-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--tb-s3); }
 
 .kb-goals { display: flex; flex-wrap: wrap; gap: var(--tb-s2) var(--tb-s5); list-style: none; margin: 0; padding: 0; }
 .kb-goals li { display: flex; align-items: center; gap: var(--tb-s2); font-size: var(--tb-text-label); }
