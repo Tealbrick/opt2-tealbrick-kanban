@@ -60,7 +60,7 @@ Port 8080. 0.25 cpu, 256 MB. Data 1 GB plus backup 2 GB (3 GB merged). Backup cr
 
 ## Pinned packages
 
-miniapp-sdk 0.1.40, manifest 0.1.31, conformance 0.1.30, ui 0.4.0 (no direct spec dependency). Re-pin miniapp-sdk 0.1.41 / manifest 0.1.32 when they are released, if needed.
+miniapp-sdk 0.1.40, manifest 0.1.31, conformance 0.1.30, ui 0.4.1 (no direct spec dependency). Re-pin miniapp-sdk 0.1.41 / manifest 0.1.32 when they are released, if needed.
 
 All `@opt2-tealbrick/*` pins use dist-host tarball URLs. Upgrade safety (SDK 0.1.25: pre-update snapshot, migration lock, failed mode) is in this app on `main` (0.1.13, dev channel; its qa1 soak is the gate for stable, C221). The stable release 0.1.12 pins SDK 0.1.22, so Core can roll back an update of that version only as an image (no data restore) until a stable version with SDK 0.1.25 ships (after the qa1 soak).
 
