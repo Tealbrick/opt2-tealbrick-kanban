@@ -18,6 +18,7 @@ import {
   type UsageTotals,
   usageLabel,
 } from "./api.ts";
+import { useChoiceFilter } from "./choice-filter.tsx";
 import { ActivityList, assigneeOptions } from "./common.tsx";
 import { EditProject, IssueDialog, MoveDialog, NewGoal, NewIssue, NewProject } from "./dialogs.tsx";
 
@@ -139,6 +140,15 @@ export function Board({ project, setProject }: { project: string | null; setProj
     () => (data?.issues ?? []).filter((i) => !who || (who === "none" ? !i.assignee : who === "owner" ? i.assignee?.kind === "owner" : i.assignee?.id === who)),
     [data, who],
   );
+  // C382 batch 4: a filter on the project and the assignee choices. The lists load in full; the chosen value always stays.
+  const projectPick = useChoiceFilter(
+    "board:project",
+    (data?.projects ?? []).map((p) => ({ value: p.id, label: p.name, meta: p.team ? "team" : p.shared ? undefined : p.ownerAgent ? "own project" : "private" })),
+    data?.project ?? "",
+    "Filter the projects",
+    { one: "project", many: "projects" },
+  );
+  const assigneePick = useChoiceFilter("board:assignee", data ? assigneeOptions(data.agents).slice(2) : [], who, "Filter the assignees", { one: "agent", many: "agents" });
   if (!data) {
     return (
       <section className="app-page" aria-label="Board">
@@ -191,6 +201,12 @@ export function Board({ project, setProject }: { project: string | null; setProj
           {notice}
         </Notice>
       ) : null}
+      {projectPick.bar || assigneePick.bar ? (
+        <div className="kb-filters">
+          {projectPick.bar}
+          {assigneePick.bar}
+        </div>
+      ) : null}
       <div className="toolbar">
         {data.projects.length ? (
           <Field label="Project" className="kb-pick">
@@ -198,7 +214,7 @@ export function Board({ project, setProject }: { project: string | null; setProj
               value={current ?? ""}
               options={[
                 ...(data.projects.length > 1 ? [{ value: ALL, label: "All projects" }] : []),
-                ...data.projects.map((p) => ({ value: p.id, label: p.name, meta: p.team ? "team" : p.shared ? undefined : p.ownerAgent ? "own project" : "private" })),
+                ...projectPick.options,
               ]}
               onValueChange={setProject}
             />
@@ -207,7 +223,7 @@ export function Board({ project, setProject }: { project: string | null; setProj
         <Field label="Assignee filter" className="kb-pick kb-pick-who">
           <Select
             value={who}
-            options={[{ value: "", label: "Everyone" }, { value: "none", label: "Unassigned" }, ...assigneeOptions(data.agents).slice(1)]}
+            options={[{ value: "", label: "Everyone" }, { value: "none", label: "Unassigned" }, ...assigneeOptions(data.agents).slice(1, 2), ...assigneePick.options]}
             onValueChange={setWho}
           />
         </Field>
