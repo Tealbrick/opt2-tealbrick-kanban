@@ -4,7 +4,7 @@
 // dist/ui-test-scopes and rendered in happy-dom.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, it } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -64,11 +64,13 @@ const { act, createElement: h } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { TbProvider } = await import("@opt2-tealbrick/miniapp-sdk/client");
 let ScopeGrid: typeof import("../src/ui/scopes.tsx").ScopeGrid;
+let scopesModule: typeof import("../src/ui/scopes.tsx");
 
 before(async () => {
   const tsc = spawnSync(join(root, "node_modules", ".bin", "tsc"), ["-p", "tsconfig.build.json", "--outDir", outDir], { cwd: root, encoding: "utf8" });
   assert.equal(tsc.status, 0, `${tsc.stdout}${tsc.stderr}`);
-  ({ ScopeGrid } = (await import(pathToFileURL(join(outDir, "ui", "scopes.js")).href)) as typeof import("../src/ui/scopes.tsx"));
+  scopesModule = (await import(pathToFileURL(join(outDir, "ui", "scopes.js")).href)) as typeof import("../src/ui/scopes.tsx");
+  ({ ScopeGrid } = scopesModule);
 });
 after(() => rmSync(outDir, { recursive: true, force: true }));
 
@@ -80,11 +82,12 @@ it("C283d: an offer is shown with plain words and accepted only on the owner's c
   const host = document.createElement("div");
   document.body.appendChild(host);
   const r = createRoot(host);
-  await act(async () => r.render(h(TbProvider, { product: "kanban" }, h(ScopeGrid, { agents: [{ id: AGENT, name: "Henry", mode: "free", status: "active" } as never] }))));
+  await act(async () => r.render(h(TbProvider, { product: "kanban" }, h(ScopeGrid))));
   await flush();
   assert.match(host.textContent ?? "", /This update lets the agent also change, delete here\./);
   assert.equal(calls.filter((c) => c.op === "tb.scopes_set").length, 0, "nothing is accepted on load");
   const allow = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Allow");
+  assert.equal(allow?.getAttribute("aria-label"), "Allow Henry the new rights in Launch");
   assert.ok(allow, "an Allow button");
   await act(async () => (allow as HTMLElement).click());
   await flush();
@@ -94,6 +97,29 @@ it("C283d: an offer is shown with plain words and accepted only on the owner's c
     [{ agent: AGENT, type: "project", id: "prj_1", access: "read", acceptOffer: { adds: ["update", "delete"] } }],
   );
   assert.doesNotMatch(host.textContent ?? "", /This update lets/, "the offer is gone after the reload");
+  await act(async () => r.unmount());
+  host.remove();
+});
+
+it("C382: the levels and the default rule are those of the manifest", () => {
+  const manifest = JSON.parse(readFileSync(join(root, "tealbrick.manifest.json"), "utf8")) as { scopes: { type: string; access: { id: string; label: string }[]; defaultGrants: { kind: string; access: string }[] }[] };
+  const scope = manifest.scopes.find((s) => s.type === "project");
+  assert.deepEqual(scopesModule.LEVELS, scope?.access.map((a) => ({ id: a.id, label: a.label })));
+  const grant = (kind: string) => scope?.defaultGrants.find((g) => g.kind === kind)?.access;
+  assert.equal(scopesModule.projectDefault("agt_a", { ownerAgent: "agt_a", shared: true }), grant("own"), "own wins over shared, the order the SDK grants them");
+  assert.equal(scopesModule.projectDefault("agt_b", { ownerAgent: "agt_a", shared: true }), grant("shared"));
+  assert.equal(scopesModule.projectDefault("agt_b", { ownerAgent: "agt_a", shared: false }), null);
+});
+
+it("C382: one dropdown row, not one per agent and project; an owner row equal to the default is not listed", async () => {
+  offer = undefined;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const r = createRoot(host);
+  await act(async () => r.render(h(TbProvider, { product: "kanban" }, h(ScopeGrid))));
+  await flush();
+  assert.equal(host.querySelectorAll('[role="combobox"]').length, 3);
+  assert.equal(host.querySelectorAll("[aria-label^='Back to default']").length, 1, "the read row differs from no access");
   await act(async () => r.unmount());
   host.remove();
 });

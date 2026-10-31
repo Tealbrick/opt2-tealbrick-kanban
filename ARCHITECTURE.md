@@ -60,7 +60,7 @@ Port 8080. 0.25 cpu, 256 MB. Data 1 GB plus backup 2 GB (3 GB merged). Backup cr
 
 ## Pinned packages
 
-miniapp-sdk 0.1.40, manifest 0.1.31, conformance 0.1.30, ui 0.2.4 (no direct spec dependency). Re-pin miniapp-sdk 0.1.41 / manifest 0.1.32 when they are released, if needed.
+miniapp-sdk 0.1.40, manifest 0.1.31, conformance 0.1.30, ui 0.4.0 (no direct spec dependency). Re-pin miniapp-sdk 0.1.41 / manifest 0.1.32 when they are released, if needed.
 
 All `@opt2-tealbrick/*` pins use dist-host tarball URLs. Upgrade safety (SDK 0.1.25: pre-update snapshot, migration lock, failed mode) is in this app on `main` (0.1.13, dev channel; its qa1 soak is the gate for stable, C221). The stable release 0.1.12 pins SDK 0.1.22, so Core can roll back an update of that version only as an image (no data restore) until a stable version with SDK 0.1.25 ships (after the qa1 soak).
 
@@ -78,7 +78,7 @@ Task Board wakes agents through app events (MANIFEST §16, SDK-API §20, `src/ev
 - `kanban.issue.commented` to the assignee and the creator (agents), minus the author: `issue_comment_add`, `board_comment_add`. Data `{projectId, commentId, by}`.
 - Summary = the issue title, or "<author name>: <comment start>", at most 280 characters, always `untrusted: true`. Agents read details with `issue_get` (a policy hook may strip summaries).
 - The store functions (`board.ts`, `sync.ts`) report events to an optional sink inside the change's transaction, so owner and agent ops emit the same way and a rolled-back change emits nothing. `issues_import` emits through the same functions. Deleting a project calls `ctx.purgeEvents(projectId)` in the delete transaction. `tb.hold.decided` (held deletes) comes from the SDK.
-- Upgrade: no app migration; the SDK adds its outbox table (schema step 11). `test/upgrade/` boots 0.1.14 and 0.1.14-dev.1 data on the current code. The Agents & scopes grid shows an offer (`offer.adds`) after an app update widens a level and accepts it only on the owner's click (C283d).
+- Upgrade: no app migration; the SDK adds its outbox table (schema step 11). `test/upgrade/` boots 0.1.14 and 0.1.14-dev.1 data on the current code. The Agents & scopes page shows an offer (`offer.adds`) after an app update widens a level and accepts it only on the owner's click (C283d).
 
 ## Known gaps
 
