@@ -67,7 +67,7 @@ export function App() {
       ) : nav.page === "agents" ? (
         <AgentsPage
           lede="Each agent has its own project. Shared projects are open to every agent for reading and work; deleting is held for your approval."
-          render={(agents) => <ScopeGrid agents={agents} />}
+          render={() => <ScopeGrid />}
         />
       ) : nav.page === "receipts" ? (
         <ReceiptsPage />

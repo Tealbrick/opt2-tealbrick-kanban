@@ -36,10 +36,6 @@
 .kb-issue .tb-dialog-head > .tb-kicker { --tone: var(--tb-tone-stone); }
 
 /* Agents & scopes: one block per agent, one Select per project (a table would scroll, and a scroll container clips the open list) */
-.kb-agent { display: grid; gap: var(--tb-s3); padding: var(--tb-s4) 0; }
-.kb-who-row { gap: var(--tb-s2); }
-.kb-who-row h3 { font-size: 1.0625rem; font-weight: var(--tb-weight-label); line-height: 22px; }
-.kb-grants { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--tb-s3); }
 @media (max-width: 720px) {
   .kb-three, .kb-pair { grid-template-columns: 1fr; }
 }
