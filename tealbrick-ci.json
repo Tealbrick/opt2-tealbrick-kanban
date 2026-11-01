@@ -10,7 +10,7 @@
       "product": "kanban",
       "kind": "app",
       "manifest": "tealbrick.manifest.json",
-      "upgradeFrom": "<=0.1.16 || 0.1.17-dev.1 || 0.1.17-dev.2 || 0.1.17-dev.3"
+      "upgradeFrom": "<0.1.17"
     }
   ]
 }
